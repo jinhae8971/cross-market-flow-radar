@@ -253,7 +253,7 @@
    ]
   }
  },
- "generated_at": "2026-08-07T23:22:07+00:00",
+ "generated_at": "2026-08-07T23:25:30+00:00",
  "as_of": "2026-08-08",
  "markets": {
   "KR": "한국",
@@ -1986,11 +1986,6 @@
  },
  "health": [
   {
-   "collector": "etf_backfill",
-   "ok": true,
-   "records": 3765
-  },
-  {
    "collector": "etf_aum",
    "ok": true,
    "records": 15
@@ -2007,5 +2002,5 @@
   }
  ],
  "rows_total": 3873,
- "rows_added": 15
+ "rows_added": 0
 }
