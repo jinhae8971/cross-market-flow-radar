@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cross-Market Flow Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#15202b; --paper:#eef1f4; --line:#c9d2da; --muted:#5d6b78;
+    --kr:#c8791f; --jp:#b8354a; --eu:#3d4d9e; --us:#12786e;
+    --up:#12786e; --down:#b8354a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 72px}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:26px}
+  h1{font-family:Archivo,sans-serif;font-weight:800;font-size:clamp(26px,4.6vw,42px);
+     letter-spacing:-.03em;margin:0 0 6px;line-height:1}
+  .sub{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);
+       text-transform:uppercase;letter-spacing:.14em}
+
+  h2{font-family:Archivo,sans-serif;font-size:12px;text-transform:uppercase;
+     letter-spacing:.16em;color:var(--muted);margin:34px 0 12px;font-weight:700}
+
+  /* 시그니처: 로테이션 띠 — 4개 시장의 자금 점유율을 한 줄로 */
+  .rot{display:flex;height:58px;border:1.5px solid var(--ink);overflow:hidden}
+  .rot div{display:flex;flex-direction:column;justify-content:center;align-items:center;
+           color:#fff;transition:flex-grow .6s cubic-bezier(.2,.7,.2,1);min-width:0}
+  .rot b{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;line-height:1.1}
+  .rot span{font-size:10px;opacity:.85;font-family:'IBM Plex Mono',monospace}
+  .rot-note{font-size:13px;color:var(--muted);margin-top:9px;line-height:1.5}
+  .rot-note strong{color:var(--ink)}
+
+  .lanes{display:grid;gap:0;border-top:1px solid var(--line)}
+  .lane{display:grid;grid-template-columns:96px 1fr 108px;align-items:center;gap:12px;
+        padding:13px 0;border-bottom:1px solid var(--line)}
+  .name{font-family:Archivo,sans-serif;font-weight:700;font-size:15px;display:flex;
+        align-items:center;gap:8px}
+  .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .val{font-family:'IBM Plex Mono',monospace;font-size:14px;text-align:right;font-weight:500}
+  .z{font-size:10.5px;color:var(--muted);display:block;font-weight:400}
+  svg{display:block;width:100%;height:44px;overflow:visible}
+
+  .lane[role=button]{cursor:pointer}
+  .lane:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .chev{font-size:10px;color:var(--muted);transition:transform .2s}
+  .lane.open .chev{transform:rotate(90deg)}
+  .detail{display:none;background:#fff;border-bottom:1px solid var(--line);
+          padding:16px 14px 20px}
+  .detail.open{display:block}
+  .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:20px}
+  .dblk h4{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.11em;
+           text-transform:uppercase;color:var(--muted);margin:0 0 8px;font-weight:500}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;
+      font-family:'IBM Plex Mono',monospace}
+  .kv i{font-style:normal;color:var(--muted)}
+  .gauge{margin-bottom:9px}
+  .gauge .lbl{display:flex;justify-content:space-between;font-size:11px;
+              font-family:'IBM Plex Mono',monospace;margin-bottom:3px}
+  .bar{height:5px;background:var(--line);position:relative}
+  .bar span{position:absolute;left:0;top:0;height:100%;background:currentColor}
+  .bar::after{content:'';position:absolute;top:-2px;bottom:-2px;width:1.5px;
+              background:var(--ink);left:var(--thr,100%)}
+  .fired{font-weight:600}
+  .alerts{display:grid;gap:8px}
+  .alert{border-left:3px solid var(--ink);background:#fff;padding:11px 14px;font-size:14px}
+  .alert .tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted);
+              text-transform:uppercase;letter-spacing:.1em}
+  .quiet{color:var(--muted);font-size:14px;background:#fff;padding:13px 15px;
+         border-left:3px solid var(--line)}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  td,th{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+  th{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;
+     letter-spacing:.1em;color:var(--muted);font-weight:500}
+  .ok{color:var(--up);font-weight:600}.bad{color:var(--down);font-weight:600}
+  footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);
+         font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media(max-width:560px){.lane{grid-template-columns:74px 1fr 88px;gap:8px}
+    .name{font-size:13px}.val{font-size:12.5px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Cross-Market Flow Radar</h1>
+    <div class="sub" id="stamp">불러오는 중…</div>
+  </header>
+
+  <h2>자금 점유율 · 최근 5거래일 변화</h2>
+  <div class="rot" id="rot"></div>
+  <div class="rot-note" id="rotnote"></div>
+
+  <h2>시장별 순유입 · 최근 120일</h2>
+  <div class="lanes" id="lanes"></div>
+
+  <h2>발화 신호</h2>
+  <div class="alerts" id="alerts"></div>
+
+  <h2>수집 상태</h2>
+  <table><thead><tr><th>수집기</th><th>상태</th><th>레코드</th><th>비고</th></tr></thead>
+  <tbody id="health"></tbody></table>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const C={KR:'--kr',JP:'--jp',EU:'--eu',US:'--us'};
+const cv=k=>getComputedStyle(document.documentElement).getPropertyValue(C[k]).trim();
+const bn=v=>(v>=0?'+':'−')+Math.abs(v).toFixed(2)+'B';
+
+function spark(pts){
+  const w=300,h=44,n=pts.length; if(!n) return '';
+  const vs=pts.map(p=>p.f), mx=Math.max(...vs.map(Math.abs))||1;
+  const bw=Math.max(1.1,w/n-0.8);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <line x1="0" y1="${h/2}" x2="${w}" y2="${h/2}" stroke="var(--line)" stroke-width="1"/>
+    ${pts.map((p,i)=>{const bh=Math.abs(p.f)/mx*(h/2-2);
+      const y=p.f>=0?h/2-bh:h/2;
+      return `<rect x="${(i*w/n).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}"
+        height="${Math.max(bh,0.6).toFixed(1)}" fill="currentColor"
+        opacity="${Math.abs(p.z||0)>=1.8?1:0.42}"/>`}).join('')}
+  </svg>`;
+}
+
+function gauge(label,val,thr,unit){
+  const pct=Math.min(Math.abs(val)/ (thr*1.6) *100,100);
+  const fired=Math.abs(val)>=thr;
+  return `<div class="gauge">
+    <div class="lbl"><span class="${fired?'fired':''}">${label}</span>
+      <span class="${fired?'fired':''}">${val}${unit} / ${thr}${unit}</span></div>
+    <div class="bar" style="--thr:${100/1.6}%"><span style="width:${pct}%"></span></div>
+  </div>`;
+}
+function detailHTML(x){
+  if(!x) return '<div class="kv"><i>상세 데이터 없음</i></div>';
+  const s=x.signal;
+  const rows=a=>a.map(r=>`<div class="kv"><i>${r.name}</i><span>${bn(r.flow)}</span></div>`).join('');
+  return `<div class="dgrid">
+    <div class="dblk"><h4>누적 순유입</h4>
+      <div class="kv"><i>최근 세션</i><span>${bn(x.latest)}</span></div>
+      <div class="kv"><i>5일</i><span>${bn(x.cum.d5)}</span></div>
+      <div class="kv"><i>20일</i><span>${bn(x.cum.d20)}</span></div>
+      <div class="kv"><i>60일</i><span>${bn(x.cum.d60)}</span></div></div>
+    <div class="dblk"><h4>신호값 · 임계치</h4>
+      ${gauge('강도 z20',s.z20??0,s.thresholds.z20,'σ')}
+      ${gauge('체제전환 CUSUM',s.cusum,s.thresholds.cusum,'')}
+      ${gauge('지속성',Math.abs(s.run),s.thresholds.run,'일')}
+      <div class="kv"><i>장기 z60</i><span>${s.z60??'–'}σ</span></div></div>
+    <div class="dblk"><h4>기여 종목 · 5일</h4>${rows(x.contributors)}</div>
+    <div class="dblk"><h4>자금 주체 · 20일</h4>${rows(x.actors)}
+      <h4 style="margin-top:14px">데이터 출처</h4>
+      ${x.sources.map(r=>`<div class="kv"><i>${r.name}</i><span>${r.rows}건 · 신뢰 ${r.confidence}</span></div>`).join('')}</div>
+  </div>`;
+}
+
+fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
+  const KO=d.markets;
+  document.getElementById('stamp').textContent =
+    `기준일 ${d.as_of} · 레코드 ${d.rows_total.toLocaleString()}건`;
+
+  // 로테이션 띠
+  const rot=document.getElementById('rot');
+  if(d.rotation.ready){
+    d.rotation.rows.slice().sort((a,b)=>['KR','JP','EU','US'].indexOf(a.market)-['KR','JP','EU','US'].indexOf(b.market))
+      .forEach(r=>{
+        const el=document.createElement('div');
+        el.style.flexGrow=Math.max(r.share,3);
+        el.style.background=cv(r.market);
+        el.innerHTML=`<b>${KO[r.market]}</b><span>${r.share}% ${r.delta>=0?'▲':'▼'}${Math.abs(r.delta)}</span>`;
+        rot.appendChild(el);
+      });
+    document.getElementById('rotnote').innerHTML =
+      `최근 5거래일 동안 자금 점유율이 <strong>${KO[d.rotation.from]}</strong>에서 ` +
+      `<strong>${KO[d.rotation.to]}</strong> 쪽으로 이동했습니다.`;
+  } else { rot.innerHTML='<div style="background:var(--line);color:var(--ink)">데이터 축적 중</div>'; }
+
+  // 시장 레인
+  const lanes=document.getElementById('lanes');
+  ['KR','JP','EU','US'].forEach(m=>{
+    const s=d.series[m]||[]; const last=s[s.length-1]||{f:0,z:null};
+    const el=document.createElement('div');
+    el.className='lane'; el.setAttribute('role','button');
+    el.tabIndex=0; el.setAttribute('aria-expanded','false');
+    el.innerHTML=`<div class="name"><i class="dot" style="background:${cv(m)}"></i>${KO[m]}
+        <i class="chev">▶</i></div>
+      <div style="color:${cv(m)}">${spark(s)}</div>
+      <div class="val">${bn(last.f)}<span class="z">z ${last.z??'–'}</span></div>`;
+    const det=document.createElement('div');
+    det.className='detail'; det.style.color=cv(m);
+    det.innerHTML=detailHTML(d.detail[m]);
+    const toggle=()=>{const on=det.classList.toggle('open');
+      el.classList.toggle('open',on); el.setAttribute('aria-expanded',on);};
+    el.addEventListener('click',toggle);
+    el.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+    lanes.appendChild(el); lanes.appendChild(det);
+  });
+
+  // 알림
+  const a=document.getElementById('alerts');
+  if(d.alerts.length){
+    d.alerts.forEach(x=>{
+      const el=document.createElement('div'); el.className='alert';
+      el.style.borderLeftColor=cv(x.market);
+      el.innerHTML=`<div class="tag">${x.ts} · ${x.triggers.join(' + ')}</div>
+        <strong>${KO[x.market]} ${x.direction}</strong> ${bn(x.flow_usd/1e9)}
+        · z ${x.z20.toFixed(2)} · ${Math.abs(x.run)}일 연속`;
+      a.appendChild(el);
+    });
+  } else {
+    a.innerHTML='<div class="quiet">발화 조건(강도·체제전환·지속성 중 2개 이상)을 충족한 시장이 없습니다.</div>';
+  }
+  d.suppressed.forEach(x=>{
+    const el=document.createElement('div'); el.className='quiet';
+    el.textContent=`${KO[x.market]} 신호는 ${x.suppressed}(으)로 억제했습니다.`;
+    a.appendChild(el);
+  });
+
+  // 수집 상태
+  document.getElementById('health').innerHTML = d.health.map(h=>
+    `<tr><td>${h.collector}</td><td class="${h.ok?'ok':'bad'}">${h.ok?'정상':'실패'}</td>
+     <td>${h.records??'–'}</td><td style="color:var(--muted)">${h.error||''}</td></tr>`).join('');
+
+  document.getElementById('foot').textContent =
+    `생성 ${d.generated_at} · 흐름은 USD 환산 순유입, 신뢰도 가중 · 투자 판단의 근거가 아닌 관측 도구입니다`;
+}).catch(e=>{
+  document.getElementById('stamp').textContent='data.json을 불러오지 못했습니다 — 워크플로우 실행 후 다시 열어 주세요';
+});
+</script>
+</body>
+</html>

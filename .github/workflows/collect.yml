@@ -1,0 +1,104 @@
+name: flow-radar-collect
+
+on:
+  schedule:
+    - cron: "0 22 * * 0-4"   # 평일 07:00 KST — 미국 마감 후 (전 시장 반영)
+    - cron: "30 7 * * 1-5"   # 평일 16:30 KST — 한국 마감 후 (KR 해상도 보강)
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "과거 1년 시딩 후 실행 (최초 1회만 true)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flow-radar-collect
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+
+  collect:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+
+      - name: Collect and build signals
+        env:
+          SEED: ${{ inputs.seed }}
+          KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          TZ: "Asia/Seoul"
+        run: |
+          set -euo pipefail
+          if [[ "${SEED:-false}" != "true" && "${SEED:-false}" != "false" ]]; then
+            echo "::error::seed 입력은 true 또는 false만 허용됩니다"
+            exit 1
+          fi
+          if [[ "${SEED:-false}" == "true" ]]; then
+            python run.py --seed
+          else
+            python run.py
+          fi
+
+      - name: Send Telegram brief
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TZ: "Asia/Seoul"
+        run: python notify.py
+
+      - name: Commit data
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/ docs/data.json
+          if git diff --cached --quiet; then
+            echo "변경 없음 - 커밋 생략"; exit 0
+          fi
+          git commit -m "data: flow radar $(date +%F)"
+          for i in 1 2 3; do
+            if git push; then exit 0; fi
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+            sleep $((i * 5))
+          done
+          echo "::error::3회 시도 후에도 푸시 실패"; exit 1
+
+      - name: Notify failure
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -sS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=$(printf '%s\n%s' 'Flow Radar 수집 실패 - AUM 스냅샷은 소급 불가하므로 즉시 재실행 필요' "${RUN_URL}")" \
+            || true

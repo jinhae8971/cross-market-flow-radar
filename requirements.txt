@@ -1,0 +1,4 @@
+pandas>=2.1
+pyarrow>=14
+yfinance>=0.2.40
+requests>=2.31
