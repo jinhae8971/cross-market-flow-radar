@@ -186,6 +186,31 @@ class TestRegressions(unittest.TestCase):
         self.assertTrue(out)
         self.assertEqual({r.ts for r in out}, {dt.date(2026, 8, 10)})
 
+    def test_collector_reseeds_on_legacy_cache_without_session(self):
+        # 세션 라벨 없는 구 캐시로 delta를 계산하면 부호가 뒤집힌 유령 흐름이 생긴다
+        from smr.collectors import etf_flow
+        idx = pd.to_datetime(["2026-08-07", "2026-08-10"])
+        closes = pd.DataFrame({s: [100.0, 101.0]
+                               for t in etf_flow.UNIVERSE.values() for s in t}, index=idx)
+        with tempfile.TemporaryDirectory() as d:
+            cache = os.path.join(d, "aum.json")
+            legacy = {"date": "2026-08-10",  # 구 포맷 — session 키 없음
+                      "latest": {s: {"aum": 1.0e10, "px": 100.0}
+                                 for t in etf_flow.UNIVERSE.values() for s in t}}
+            with open(cache, "w", encoding="utf-8") as f:
+                json.dump(legacy, f)
+
+            orig = etf_flow._snapshot
+            etf_flow._snapshot = lambda tickers: {s: {"aum": 1.02e10} for s in tickers}
+            try:
+                out = etf_flow.collect(cache_path=cache, closes=closes)
+                with open(cache, encoding="utf-8") as f:
+                    after = json.load(f)
+            finally:
+                etf_flow._snapshot = orig
+        self.assertEqual(out, [], "레거시 캐시 회차는 레코드를 만들지 않아야 한다")
+        self.assertEqual(after["session"], "2026-08-10", "기준점은 새 포맷으로 재설정")
+
     def test_collector_skips_when_no_new_session(self):
         from smr.collectors import etf_flow
         idx = pd.to_datetime(["2026-08-07", "2026-08-10"])

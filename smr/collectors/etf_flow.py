@@ -120,6 +120,18 @@ def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE,
         print(f"[etf_flow] {session} 세션은 이미 수집됨 — 스킵")
         return []
 
+    if prev and prev_session is None:
+        # 레거시 캐시(세션 라벨 없음)는 어느 세션 기준인지 알 수 없다.
+        # 이 상태에서 delta를 계산하면 이미 반영된 AUM을 한 번 더 빼면서
+        # 가격수익률의 부호만 뒤집힌 유령 흐름이 만들어진다.
+        # 따라서 기준점만 새 포맷으로 다시 심고 이번 회차는 건너뛴다.
+        print("[etf_flow] 레거시 캐시 감지 — 기준점만 재설정하고 스킵")
+        snap = _snapshot(syms)
+        if snap:
+            _save_cache(cache_path, {"session": session.isoformat(),
+                                     "latest": snap, "prev_session": None})
+        return []
+
     snap = _snapshot(syms)
     if not snap:
         print("[etf_flow] AUM 스냅샷 전량 실패 — 캐시 보존")

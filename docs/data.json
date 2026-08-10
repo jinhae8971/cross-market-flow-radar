@@ -1,18 +1,18 @@
 {
- "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
+ "dashboard_url": "",
  "detail": {
   "EU": {
-   "latest": -0.364,
+   "latest": -0.001,
    "cum": {
-    "d5": -0.511,
-    "d20": -4.023,
-    "d60": -8.965
+    "d5": 1.139,
+    "d20": -3.744,
+    "d60": -8.653
    },
    "signal": {
-    "z20": -0.2,
-    "z60": -0.27,
+    "z20": 0.23,
+    "z60": 0.18,
     "cusum": 0.0,
-    "run": -1,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -21,70 +21,65 @@
    },
    "contributors": [
     {
-     "name": "VGK",
-     "flow": -0.317
+     "name": "EURO FX",
+     "flow": 1.243
     },
     {
      "name": "EWU",
-     "flow": -0.087
+     "flow": -0.115
     },
     {
-     "name": "EZU",
+     "name": "VGK",
      "flow": -0.048
     },
     {
-     "name": "FEZ",
-     "flow": -0.041
-    },
-    {
      "name": "EWG",
-     "flow": -0.016
+     "flow": 0.026
     },
     {
-     "name": "EWQ",
-     "flow": -0.003
+     "name": "FEZ",
+     "flow": 0.013
+    },
+    {
+     "name": "EZU",
+     "flow": 0.011
     }
    ],
    "actors": [
     {
      "name": "spec",
-     "flow": -3.939
+     "flow": -3.626
     },
     {
      "name": "foreign",
-     "flow": -0.084
+     "flow": -0.118
     }
    ],
    "sources": [
     {
      "name": "etf_moneyflow_proxy",
-     "rows": 108,
+     "rows": 120,
      "confidence": 0.5
     },
     {
-     "name": "etf_aum_delta",
-     "rows": 12,
-     "confidence": 0.75
-    },
-    {
      "name": "cftc_cot",
-     "rows": 3,
+     "rows": 4,
      "confidence": 0.6
     }
    ]
   },
   "JP": {
-   "latest": -0.594,
+   "latest": 0.342,
    "cum": {
-    "d5": -0.276,
-    "d20": 0.333,
-    "d60": 0.099
+    "d5": 0.031,
+    "d20": 0.379,
+    "d60": 0.414
    },
    "signal": {
-    "z20": -2.49,
-    "z60": -2.38,
-    "cusum": -1.88,
-    "run": -1,
+    "z20": 1.6,
+    "z60": 1.41,
+    "cusum": 0.91,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -93,58 +88,57 @@
    },
    "contributors": [
     {
-     "name": "EWJ",
-     "flow": -0.175
+     "name": "NIKKEI STOCK AVERAGE YEN DENOM",
+     "flow": -0.379
     },
     {
-     "name": "DXJ",
-     "flow": -0.052
+     "name": "EWJ",
+     "flow": 0.236
     },
     {
      "name": "BBJP",
-     "flow": -0.05
+     "flow": 0.115
+    },
+    {
+     "name": "DXJ",
+     "flow": 0.06
     }
    ],
    "actors": [
     {
      "name": "foreign",
-     "flow": 0.447
+     "flow": 0.47
     },
     {
      "name": "spec",
-     "flow": -0.114
+     "flow": -0.091
     }
    ],
    "sources": [
     {
      "name": "etf_moneyflow_proxy",
-     "rows": 54,
+     "rows": 60,
      "confidence": 0.5
     },
     {
-     "name": "etf_aum_delta",
-     "rows": 6,
-     "confidence": 0.75
-    },
-    {
      "name": "cftc_cot",
-     "rows": 3,
+     "rows": 4,
      "confidence": 0.6
     }
    ]
   },
   "KR": {
-   "latest": -0.233,
+   "latest": 0.224,
    "cum": {
-    "d5": -0.47,
-    "d20": -0.524,
-    "d60": 5.88
+    "d5": 2.069,
+    "d20": -0.764,
+    "d60": 7.638
    },
    "signal": {
-    "z20": -0.14,
-    "z60": -0.22,
+    "z20": 0.16,
+    "z60": 0.06,
     "cusum": 0.0,
-    "run": -1,
+    "run": 2,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -154,44 +148,39 @@
    "contributors": [
     {
      "name": "EWY",
-     "flow": -0.471
+     "flow": 1.986
     },
     {
      "name": "FLKR",
-     "flow": 0.001
+     "flow": 0.083
     }
    ],
    "actors": [
     {
      "name": "foreign",
-     "flow": -0.524
+     "flow": -0.764
     }
    ],
    "sources": [
     {
      "name": "etf_moneyflow_proxy",
-     "rows": 36,
+     "rows": 40,
      "confidence": 0.5
-    },
-    {
-     "name": "etf_aum_delta",
-     "rows": 4,
-     "confidence": 0.75
     }
    ]
   },
   "US": {
-   "latest": -8.387,
+   "latest": 22.153,
    "cum": {
-    "d5": -24.314,
-    "d20": 22.315,
-    "d60": 97.471
+    "d5": 53.683,
+    "d20": 17.418,
+    "d60": 141.567
    },
    "signal": {
-    "z20": -0.41,
-    "z60": -0.41,
-    "cusum": 0.0,
-    "run": -2,
+    "z20": 0.9,
+    "z60": 0.81,
+    "cusum": 0.35,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -200,53 +189,52 @@
    },
    "contributors": [
     {
-     "name": "SPY",
-     "flow": -15.196
+     "name": "QQQ",
+     "flow": 29.178
     },
     {
-     "name": "QQQ",
-     "flow": -3.81
+     "name": "SPY",
+     "flow": 24.815
+    },
+    {
+     "name": "S&P 500 Consolidated",
+     "flow": -2.075
     },
     {
      "name": "IWM",
-     "flow": -3.433
+     "flow": 1.949
     },
     {
      "name": "DIA",
-     "flow": -1.874
+     "flow": -0.184
     }
    ],
    "actors": [
     {
      "name": "foreign",
-     "flow": 18.929
+     "flow": 13.702
     },
     {
      "name": "spec",
-     "flow": 3.386
+     "flow": 3.717
     }
    ],
    "sources": [
     {
      "name": "etf_moneyflow_proxy",
-     "rows": 72,
+     "rows": 80,
      "confidence": 0.5
     },
     {
-     "name": "etf_aum_delta",
-     "rows": 8,
-     "confidence": 0.75
-    },
-    {
      "name": "cftc_cot",
-     "rows": 3,
+     "rows": 4,
      "confidence": 0.6
     }
    ]
   }
  },
- "generated_at": "2026-08-10T22:55:44+00:00",
- "as_of": "2026-08-11",
+ "generated_at": "2026-08-10T22:57:41+00:00",
+ "as_of": "2026-08-07",
  "markets": {
   "KR": "한국",
   "JP": "일본",
@@ -259,36 +247,46 @@
   "ready": true,
   "rows": [
    {
-    "market": "KR",
-    "share": 28.4,
-    "delta": 10.5,
-    "score": 38.9
-   },
-   {
-    "market": "JP",
-    "share": 23.7,
-    "delta": 6.4,
-    "score": 30.1
+    "market": "EU",
+    "share": 29.9,
+    "delta": 19.7,
+    "score": 49.6
    },
    {
     "market": "US",
-    "share": 24.2,
-    "delta": -7.1,
-    "score": 17.1
+    "share": 29.5,
+    "delta": 0.3,
+    "score": 29.8
    },
    {
-    "market": "EU",
-    "share": 23.7,
-    "delta": -9.8,
-    "score": 13.9
+    "market": "KR",
+    "share": 23.2,
+    "delta": 4.3,
+    "score": 27.5
+   },
+   {
+    "market": "JP",
+    "share": 17.4,
+    "delta": -24.3,
+    "score": -6.9
    }
   ],
-  "as_of": "2026-08-11",
-  "from": "EU",
-  "to": "KR"
+  "as_of": "2026-08-07",
+  "from": "JP",
+  "to": "EU"
  },
  "series": {
   "EU": [
+   {
+    "d": "2026-04-09",
+    "f": 0.114,
+    "z": 0.36
+   },
+   {
+    "d": "2026-04-10",
+    "f": -0.06,
+    "z": 0.26
+   },
    {
     "d": "2026-04-13",
     "f": 0.363,
@@ -698,19 +696,19 @@
     "d": "2026-08-07",
     "f": -0.001,
     "z": 0.23
-   },
-   {
-    "d": "2026-08-10",
-    "f": 0.155,
-    "z": 0.4
-   },
-   {
-    "d": "2026-08-11",
-    "f": -0.364,
-    "z": -0.2
    }
   ],
   "JP": [
+   {
+    "d": "2026-04-09",
+    "f": 0.201,
+    "z": 0.52
+   },
+   {
+    "d": "2026-04-10",
+    "f": 0.051,
+    "z": 0.14
+   },
    {
     "d": "2026-04-13",
     "f": 0.468,
@@ -1120,19 +1118,19 @@
     "d": "2026-08-07",
     "f": 0.342,
     "z": 1.6
-   },
-   {
-    "d": "2026-08-10",
-    "f": 0.261,
-    "z": 1.08
-   },
-   {
-    "d": "2026-08-11",
-    "f": -0.594,
-    "z": -2.49
    }
   ],
   "KR": [
+   {
+    "d": "2026-04-09",
+    "f": 0.892,
+    "z": 0.8
+   },
+   {
+    "d": "2026-04-10",
+    "f": 0.189,
+    "z": 0.11
+   },
    {
     "d": "2026-04-13",
     "f": 0.769,
@@ -1542,19 +1540,19 @@
     "d": "2026-08-07",
     "f": 0.224,
     "z": 0.16
-   },
-   {
-    "d": "2026-08-10",
-    "f": 0.343,
-    "z": 0.17
-   },
-   {
-    "d": "2026-08-11",
-    "f": -0.233,
-    "z": -0.14
    }
   ],
   "US": [
+   {
+    "d": "2026-04-09",
+    "f": 25.915,
+    "z": 0.97
+   },
+   {
+    "d": "2026-04-10",
+    "f": -10.099,
+    "z": -0.06
+   },
    {
     "d": "2026-04-13",
     "f": 21.47,
@@ -1964,16 +1962,6 @@
     "d": "2026-08-07",
     "f": 22.153,
     "z": 0.9
-   },
-   {
-    "d": "2026-08-10",
-    "f": 1.546,
-    "z": -0.02
-   },
-   {
-    "d": "2026-08-11",
-    "f": -8.387,
-    "z": -0.41
    }
   ]
  },
@@ -1981,7 +1969,8 @@
   {
    "collector": "etf_aum",
    "ok": true,
-   "records": 15
+   "records": 0,
+   "error": "새 세션 없음 — 수집 생략"
   },
   {
    "collector": "cot",
@@ -1992,14 +1981,8 @@
    "collector": "krx",
    "ok": true,
    "records": 0
-  },
-  {
-   "collector": "repair",
-   "ok": true,
-   "records": 2,
-   "error": "미갱신 세션 제거: 2026-08-07, 2026-08-08"
   }
  ],
- "rows_total": 3873,
+ "rows_total": 3843,
  "rows_added": 0
 }
