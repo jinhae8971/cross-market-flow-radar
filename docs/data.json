@@ -1,5 +1,5 @@
 {
- "dashboard_url": "",
+ "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
  "detail": {
   "EU": {
    "latest": -0.001,
@@ -233,7 +233,7 @@
    ]
   }
  },
- "generated_at": "2026-08-10T22:57:41+00:00",
+ "generated_at": "2026-08-10T22:58:57+00:00",
  "as_of": "2026-08-07",
  "markets": {
   "KR": "한국",
