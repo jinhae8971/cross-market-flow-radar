@@ -49,7 +49,9 @@ def build_message(d: dict) -> str:
 
     rot = d.get("rotation", {})
     if rot.get("ready"):
-        lines.append(f"<b>로테이션</b> {KO[rot['from']]} → {KO[rot['to']]}")
+        src, dst = rot.get("from"), rot.get("to")
+        lines.append(f"<b>로테이션</b> {KO[src]} → {KO[dst]}" if src and dst
+                     else "<b>로테이션</b> 방향성 뚜렷하지 않음")
         for r in rot["rows"]:
             arrow = "▲" if r["delta"] >= 0 else "▼"
             lines.append(f"  {KO[r['market']]} {r['share']:>5.1f}% {arrow}{abs(r['delta'])}")

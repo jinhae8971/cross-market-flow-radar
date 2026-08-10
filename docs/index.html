@@ -93,7 +93,7 @@
     <div class="sub" id="stamp">불러오는 중…</div>
   </header>
 
-  <h2>자금 점유율 · 최근 5거래일 변화</h2>
+  <h2>상대 자금 배분 · 최근 5거래일 변화</h2>
   <div class="rot" id="rot"></div>
   <div class="rot-note" id="rotnote"></div>
 
@@ -173,13 +173,17 @@ fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
         const el=document.createElement('div');
         el.style.flexGrow=Math.max(r.share,3);
         el.style.background=cv(r.market);
-        el.innerHTML=`<b>${KO[r.market]}</b><span>${r.share}% ${r.delta>=0?'▲':'▼'}${Math.abs(r.delta)}</span>`;
+        el.innerHTML=`<b>${KO[r.market]}</b><span>${r.share.toFixed(1)}% ${r.delta>=0?'▲':'▼'}${Math.abs(r.delta).toFixed(1)}</span>`;
         rot.appendChild(el);
       });
-    document.getElementById('rotnote').innerHTML =
-      `최근 5거래일 동안 자금 점유율이 <strong>${KO[d.rotation.from]}</strong>에서 ` +
-      `<strong>${KO[d.rotation.to]}</strong> 쪽으로 이동했습니다.`;
-  } else { rot.innerHTML='<div style="background:var(--line);color:var(--ink)">데이터 축적 중</div>'; }
+    document.getElementById('rotnote').innerHTML = (d.rotation.from && d.rotation.to)
+      ? `최근 5거래일 동안 상대 자금 배분이 <strong>${KO[d.rotation.from]}</strong>에서 ` +
+        `<strong>${KO[d.rotation.to]}</strong> 쪽으로 이동했습니다.`
+      : `최근 5거래일 동안 시장 간 배분 격차가 뚜렷하지 않습니다.`;
+  } else {
+    rot.innerHTML='<div style="background:var(--line);color:var(--ink)">데이터 축적 중</div>';
+    document.getElementById('rotnote').textContent = d.rotation.reason || '';
+  }
 
   // 시장 레인
   const lanes=document.getElementById('lanes');

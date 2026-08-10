@@ -12,7 +12,7 @@ import traceback
 
 import pandas as pd
 
-from . import detail, rotation, signals
+from . import detail, repair, rotation, signals
 from .calendar_mask import masked
 from .collectors import cot, etf_flow, korea
 from .schema import FlowStore, to_frame
@@ -41,6 +41,9 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
 
     r, h = _safe("etf_aum", etf_flow.collect)
     records += r
+    if h.get("ok") and not r:
+        # 0건은 실패가 아니다 — 아직 새 세션이 없다는 정상 상태다.
+        h["error"] = "새 세션 없음 — 수집 생략"
     health.append(h)
 
     r, h = _safe("cot", cot.collect, 26)
@@ -54,6 +57,14 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
     store = FlowStore(store_path)
     added = store.upsert(to_frame(records))
     df = store.load()
+
+    # 자가 복구 — 과거 결함이 남긴 '전 종목 0' 날짜를 걷어낸다(멱등).
+    df, purged = repair.drop_dead_sessions(df)
+    if purged:
+        store.replace(df)
+        health.append({"collector": "repair", "ok": True,
+                       "records": len(purged),
+                       "error": f"미갱신 세션 제거: {', '.join(purged)}"})
 
     sig = signals.build(df)
     alerts = signals.alerts(sig)

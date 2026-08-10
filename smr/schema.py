@@ -82,12 +82,22 @@ class FlowStore:
         return pd.read_parquet(self.path)
 
     def upsert(self, df: pd.DataFrame) -> int:
+        """같은 키가 겹치면 재수집분을 우선 채택하되, 0이 실값을 덮지 못하게 한다.
+
+        수집기가 새 세션 없이 돌면 delta가 0으로 계산된다. keep="last"만
+        쓰면 그 0이 같은 날 먼저 저장된 실측값을 지운다(하루 두 번 도는
+        스케줄에서는 저녁 실행이 아침 실행을 매일 지우게 된다).
+        따라서 우선순위를 (비0 > 0), 그다음 (나중 > 먼저)로 둔다.
+        """
         if df.empty:
             return 0
         base = self.load()
         merged = pd.concat([base, df], ignore_index=True)
-        # 뒤에 온 레코드(재수집분)를 우선 채택 — 확정치가 추정치를 덮어쓴다
-        merged = merged.drop_duplicates(subset=self.KEY, keep="last")
+        merged["_ord"] = range(len(merged))
+        merged["_zero"] = (merged["net_flow_usd"] == 0).astype(int)
+        merged = merged.sort_values(["_zero", "_ord"], ascending=[True, False])
+        merged = merged.drop_duplicates(subset=self.KEY, keep="first")
+        merged = merged.drop(columns=["_ord", "_zero"])
         merged = merged.sort_values(["ts", "market", "actor"]).reset_index(drop=True)
         added = len(merged) - len(base)
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
@@ -95,3 +105,10 @@ class FlowStore:
         merged.to_parquet(tmp, index=False)
         os.replace(tmp, self.path)
         return added
+
+    def replace(self, df: pd.DataFrame) -> None:
+        """전체 교체. 복구 루틴 전용 — 일반 수집 경로에서는 쓰지 않는다."""
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        tmp = f"{self.path}.tmp"
+        df.reset_index(drop=True).to_parquet(tmp, index=False)
+        os.replace(tmp, self.path)

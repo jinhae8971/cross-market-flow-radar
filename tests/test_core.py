@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import os
 import sys
 import tempfile
@@ -9,7 +10,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from smr import rotation, signals
+from smr import repair, rotation, signals
 from smr.calendar_mask import masked
 from smr.schema import FlowRecord, FlowStore, to_frame
 
@@ -98,6 +99,103 @@ class TestRotation(unittest.TestCase):
         m = rotation.matrix(signals.build(to_frame(recs)))
         self.assertTrue(m["ready"])
         self.assertEqual(m["to"], "JP")
+
+
+class TestRegressions(unittest.TestCase):
+    """2026-08-11 진단에서 나온 결함 4건의 재발 방지."""
+
+    def _flat(self, values_by_market, days=30):
+        base = dt.date(2026, 1, 5)
+        recs = []
+        for i in range(days):
+            d = base + dt.timedelta(days=i)
+            for m, v in values_by_market.items():
+                recs.append(rec(d, m, v(i) if callable(v) else v))
+        return signals.build(to_frame(recs))
+
+    def test_share_survives_all_markets_outflowing(self):
+        # 4개 시장 전부 순유출 — 이전 구현은 분모 0으로 전 시장 0%로 붕괴했다
+        sig = self._flat({"KR": -5.0, "JP": -9.0, "EU": -3.0, "US": -20.0})
+        sh = rotation.share(sig)
+        last = sh.iloc[-1]
+        self.assertAlmostEqual(float(last.sum()), 100.0, places=0)
+        self.assertTrue((last > 0).all(), "전 시장 유출일에도 배분율은 0이 아니어야 한다")
+
+    def test_no_direction_invented_when_markets_are_tied(self):
+        # 완전 동률 — 이전 구현은 정렬 안정성 때문에 알파벳 순을 방향으로 내보냈다
+        sig = self._flat({"KR": 4.0, "JP": 4.0, "EU": 4.0, "US": 4.0})
+        m = rotation.matrix(sig)
+        self.assertIsNone(m["from"])
+        self.assertIsNone(m["to"])
+
+    def test_zero_does_not_overwrite_real_value(self):
+        # 새 세션 없이 돈 실행이 같은 날 실측값을 0으로 지우면 안 된다
+        with tempfile.TemporaryDirectory() as d:
+            store = FlowStore(os.path.join(d, "f.parquet"))
+            day = dt.date(2026, 8, 11)
+            store.upsert(to_frame([rec(day, "JP", -5.9e8)]))
+            store.upsert(to_frame([rec(day, "JP", 0.0)]))
+            df = store.load()
+            self.assertEqual(len(df), 1)
+            self.assertAlmostEqual(df["net_flow_usd"].iloc[0], -5.9e8)
+
+    def test_repair_drops_all_zero_sessions_only(self):
+        good = dt.date(2026, 8, 7)
+        dead = dt.date(2026, 8, 10)
+        df = to_frame([
+            rec(good, "KR", 100.0, source="etf_aum_delta"),
+            rec(good, "US", 0.0, source="etf_aum_delta"),   # 실제 0 — 보존돼야 함
+            rec(dead, "KR", 0.0, source="etf_aum_delta"),
+            rec(dead, "US", 0.0, source="etf_aum_delta"),
+        ])
+        out, purged = repair.drop_dead_sessions(df)
+        self.assertEqual(purged, ["2026-08-10"])
+        self.assertEqual(len(out), 2)
+        self.assertEqual(set(out["ts"].dt.date), {good})
+
+    def test_repair_is_idempotent(self):
+        df = to_frame([rec(dt.date(2026, 8, 10), "KR", 0.0, source="etf_aum_delta")])
+        once, _ = repair.drop_dead_sessions(df)
+        twice, purged = repair.drop_dead_sessions(once)
+        self.assertEqual(purged, [])
+        self.assertEqual(len(once), len(twice))
+
+    def test_collector_labels_with_session_date_not_today(self):
+        # 종가 인덱스의 마지막 세션일로 라벨링되어야 한다(KST 오늘 날짜가 아니라)
+        from smr.collectors import etf_flow
+        idx = pd.to_datetime(["2026-08-07", "2026-08-10"])
+        closes = pd.DataFrame({s: [100.0, 101.0]
+                               for t in etf_flow.UNIVERSE.values() for s in t}, index=idx)
+        with tempfile.TemporaryDirectory() as d:
+            cache = os.path.join(d, "aum.json")
+            prev = {"session": "2026-08-07",
+                    "latest": {s: {"aum": 1.0e10}
+                               for t in etf_flow.UNIVERSE.values() for s in t}}
+            with open(cache, "w", encoding="utf-8") as f:
+                json.dump(prev, f)
+
+            def fake_snapshot(tickers):
+                return {s: {"aum": 1.02e10} for s in tickers}
+
+            orig = etf_flow._snapshot
+            etf_flow._snapshot = fake_snapshot
+            try:
+                out = etf_flow.collect(cache_path=cache, closes=closes)
+            finally:
+                etf_flow._snapshot = orig
+        self.assertTrue(out)
+        self.assertEqual({r.ts for r in out}, {dt.date(2026, 8, 10)})
+
+    def test_collector_skips_when_no_new_session(self):
+        from smr.collectors import etf_flow
+        idx = pd.to_datetime(["2026-08-07", "2026-08-10"])
+        closes = pd.DataFrame({s: [100.0, 101.0]
+                               for t in etf_flow.UNIVERSE.values() for s in t}, index=idx)
+        with tempfile.TemporaryDirectory() as d:
+            cache = os.path.join(d, "aum.json")
+            with open(cache, "w", encoding="utf-8") as f:
+                json.dump({"session": "2026-08-10", "latest": {}}, f)
+            self.assertEqual(etf_flow.collect(cache_path=cache, closes=closes), [])
 
 
 class TestNotify(unittest.TestCase):

@@ -36,8 +36,11 @@ UNIVERSE: dict[str, tuple[str, ...]] = {
 
 AUM_CACHE = "data/aum_snapshots.json"
 
+SYM_TO_MARKET: dict[str, str] = {s: m for m, t in UNIVERSE.items() for s in t}
+
 
 def _snapshot(tickers: Sequence[str]) -> dict[str, dict]:
+    """티커별 AUM 스냅샷. 가격은 여기서 받지 않는다(세션 정합성 때문)."""
     out: dict[str, dict] = {}
     for sym in tickers:
         try:
@@ -46,12 +49,28 @@ def _snapshot(tickers: Sequence[str]) -> dict[str, dict]:
             print(f"[etf_flow] {sym} info 실패: {exc}")
             continue
         aum = info.get("totalAssets")
-        px = info.get("previousClose") or info.get("navPrice")
-        if not aum or not px:
-            print(f"[etf_flow] {sym} AUM/가격 결측 — 스킵")
+        if not aum:
+            print(f"[etf_flow] {sym} AUM 결측 — 스킵")
             continue
-        out[sym] = {"aum": float(aum), "px": float(px)}
+        out[sym] = {"aum": float(aum)}
     return out
+
+
+def _closes(tickers: Sequence[str], period: str = "10d") -> pd.DataFrame:
+    """최근 종가. 인덱스가 '실제 세션일'이므로 날짜 라벨의 단일 진실 원천이다.
+
+    이전 구현은 info['previousClose']를 썼는데, 이 값에는 날짜가 없다.
+    그래서 as_of를 dt.date.today()로 붙였고, 워크플로우가 TZ=Asia/Seoul로
+    돌기 때문에 미국 마감 직후(=KST 다음 날 새벽) 실행분이 하루 뒤 날짜로
+    기록됐다. 토요일자 레코드가 생긴 원인이다.
+    """
+    # auto_adjust=False 의도적 — 배당락일에는 AUM도 실제로 줄어든다.
+    # 배당 조정 가격을 쓰면 그 감소분이 '유출'로 잘못 잡힌다.
+    df = yf.download(list(tickers), period=period, progress=False,
+                     auto_adjust=False)["Close"]
+    if isinstance(df, pd.Series):  # 단일 티커
+        df = df.to_frame(name=list(tickers)[0])
+    return df.dropna(how="all")
 
 
 def _load_cache(path: str) -> dict:
@@ -74,33 +93,60 @@ def _save_cache(path: str, obj: dict) -> None:
     os.replace(tmp, path)
 
 
-def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE) -> list[FlowRecord]:
-    as_of = as_of or dt.date.today()
+def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE,
+            closes: pd.DataFrame | None = None) -> list[FlowRecord]:
+    """직전 스냅샷 대비 순설정을 추정한다.
+
+    새 세션이 없으면 빈 리스트를 반환한다(캐시도 건드리지 않는다).
+    "새 세션 없음"과 "흐름이 0이었음"은 전혀 다른 사실이고,
+    후자로 기록하면 z-score의 분모와 로테이션 분모를 동시에 오염시킨다.
+    """
+    syms = [s for t in UNIVERSE.values() for s in t]
+    if closes is None:
+        closes = _closes(syms)
+    if closes.empty or len(closes.index) < 2:
+        print("[etf_flow] 종가 이력 부족 — 스킵")
+        return []
+
+    session = closes.index[-1].date()          # 방금 마감된 실제 세션
+    if as_of is not None:                      # 테스트/수동 재수집용 오버라이드
+        session = as_of
+
     cache = _load_cache(cache_path)
     prev = cache.get("latest", {})
-    prev_date = cache.get("date")
+    prev_session = cache.get("session")
+
+    if prev_session == session.isoformat():
+        print(f"[etf_flow] {session} 세션은 이미 수집됨 — 스킵")
+        return []
+
+    snap = _snapshot(syms)
+    if not snap:
+        print("[etf_flow] AUM 스냅샷 전량 실패 — 캐시 보존")
+        return []
 
     records: list[FlowRecord] = []
-    fresh: dict[str, dict] = {}
-
-    for market, tickers in UNIVERSE.items():
-        snap = _snapshot(tickers)
-        fresh.update(snap)
-        if not prev:
-            continue
+    if prev:
         for sym, cur in snap.items():
             old = prev.get(sym)
-            if not old or not old.get("px"):
+            if not old or not old.get("aum"):
                 continue
-            ret = cur["px"] / old["px"] - 1.0
+            try:
+                c1 = float(closes[sym].iloc[-1])
+                c0 = float(closes[sym].iloc[-2])
+            except (KeyError, IndexError, TypeError, ValueError):
+                continue
+            if not c0:
+                continue
+            ret = c1 / c0 - 1.0
             flow = cur["aum"] - old["aum"] * (1.0 + ret)
             # 일 AUM의 0.02% 미만은 반올림 노이즈로 간주
             if abs(flow) < cur["aum"] * 2e-4:
                 flow = 0.0
             records.append(
                 FlowRecord(
-                    ts=as_of,
-                    market=market,
+                    ts=session,
+                    market=SYM_TO_MARKET[sym],
                     actor="foreign",
                     instrument=sym,
                     net_flow_usd=round(flow, 2),
@@ -110,9 +156,8 @@ def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE) -> list[F
                 )
             )
 
-    if fresh:
-        _save_cache(cache_path, {"date": as_of.isoformat(), "latest": fresh,
-                                 "prev_date": prev_date})
+    _save_cache(cache_path, {"session": session.isoformat(), "latest": snap,
+                             "prev_session": prev_session})
     return records
 
 
