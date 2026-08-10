@@ -236,6 +236,43 @@ class TestNotify(unittest.TestCase):
         self.assertEqual(notify.dashboard_url({"dashboard_url": "https://x.io/d/"}),
                          "https://x.io/d")
 
+    def test_force_flag_overrides_daily_dedup(self):
+        # 중복 방지 가드가 강제 발송까지 막으면 안 된다 (스텝은 success인데 미발송)
+        import notify
+        payload = {"as_of": "2026-08-11", "alerts": [], "suppressed": [],
+                   "rotation": {"ready": False, "rows": []},
+                   "detail": {}, "health": [], "dashboard_url": "https://x.io/d"}
+        today = dt.date.today().isoformat()
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "docs"))
+            os.makedirs(os.path.join(d, "data"))
+            with open(os.path.join(d, "docs", "data.json"), "w", encoding="utf-8") as f:
+                json.dump(payload, f)
+            with open(os.path.join(d, "data", "notify_state.json"), "w", encoding="utf-8") as f:
+                json.dump({"last_sent": today}, f)
+
+            cwd = os.getcwd()
+            sent = []
+            orig_post = notify.requests.post
+            notify.requests.post = lambda *a, **k: sent.append(k) or type(
+                "R", (), {"raise_for_status": lambda self: None})()
+            os.environ["TELEGRAM_TOKEN"] = "t"
+            os.environ["TELEGRAM_CHAT_ID"] = "c"
+            try:
+                os.chdir(d)
+                os.environ.pop("NOTIFY_FORCE", None)
+                notify.main()
+                self.assertEqual(len(sent), 0, "같은 날 재실행은 기본적으로 생략")
+                os.environ["NOTIFY_FORCE"] = "true"
+                notify.main()
+                self.assertEqual(len(sent), 1, "force=true면 발송돼야 한다")
+            finally:
+                os.chdir(cwd)
+                notify.requests.post = orig_post
+                os.environ.pop("NOTIFY_FORCE", None)
+                for k in ("TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID"):
+                    os.environ.pop(k, None)
+
     def test_message_contains_link_and_summary(self):
         import notify
         d = {

@@ -10,6 +10,10 @@ on:
         description: "과거 1년 시딩 후 실행 (최초 1회만 true)"
         required: false
         default: "false"
+      force_notify:
+        description: "오늘 이미 발송했어도 텔레그램 브리프를 다시 보낸다"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -70,6 +74,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          NOTIFY_FORCE: ${{ inputs.force_notify }}
           TZ: "Asia/Seoul"
         run: python notify.py
 

@@ -108,8 +108,10 @@ def main() -> None:
                 state = json.load(f)
         except (json.JSONDecodeError, OSError):
             pass
-    if state.get("last_sent") == today and not d["alerts"]:
-        print("[notify] 오늘 스냅샷 이미 발송 - 생략")
+    force = os.environ.get("NOTIFY_FORCE", "").lower() == "true"
+    if state.get("last_sent") == today and not d["alerts"] and not force:
+        print("[notify] 오늘 스냅샷 이미 발송 - 생략 "
+              "(재발송하려면 workflow_dispatch의 force_notify=true)")
         return
 
     cfg = load_config()
