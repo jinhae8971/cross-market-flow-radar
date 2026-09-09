@@ -41,9 +41,14 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
 
     r, h = _safe("etf_aum", etf_flow.collect)
     records += r
+    if not r and os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as previous_file:
+            previous = json.load(previous_file)
+        if previous.get("quality_warnings"):
+            h.update(ok=False, error="새 ETF 관측 전까지 이전 품질 경고 유지")
     if h.get("ok") and not r:
         # 0건은 실패가 아니다 — 아직 새 세션이 없다는 정상 상태다.
-        h["error"] = "새 세션 없음 — 수집 생략"
+        h["error"] = "추가 관측 없음 또는 기준점 설정 — 신규 흐름 없음"
     health.append(h)
 
     r, h = _safe("cot", cot.collect, 26)
@@ -52,6 +57,8 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
 
     r, h = _safe("krx", korea.collect)
     records += r
+    if h.get("ok") and not r:
+        h.update(status="unavailable", error="KRX 원천 수급 미수집 — 한국은 ETF 대리지표")
     health.append(h)
 
     store = FlowStore(store_path)
@@ -80,6 +87,11 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
 
     rot = rotation.matrix(sig)
 
+    quality = [h.get("error", h["collector"]) for h in health if not h.get("ok")]
+    if quality:
+        kept = []
+        rot = {"ready": False, "rows": [], "from": None, "to": None}
+
     recent = sig[sig["ts"] >= sig["ts"].max() - pd.Timedelta(days=120)]
     series = {
         m: [
@@ -101,6 +113,7 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         "rotation": rot,
         "series": series,
         "health": health,
+        "quality_warnings": quality,
         "rows_total": int(len(df)),
         "rows_added": int(added),
     }
@@ -113,3 +126,4 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         os.fsync(f.fileno())
     os.replace(tmp, out_path)
     return payload
+

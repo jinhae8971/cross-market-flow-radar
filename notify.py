@@ -47,7 +47,10 @@ def build_message(d: dict) -> str:
     """텔레그램은 결론만. 근거는 대시보드에서 본다."""
     lines = [f"<b>🌐 Cross-Market Flow Radar</b>  <code>{d['as_of']}</code>", ""]
 
-    rot = d.get("rotation", {})
+    quality = d.get("quality_warnings", [])
+    if quality:
+        lines.append("⚠️ 데이터 품질 확인 필요 — 신규 신호·로테이션 판단 보류")
+    rot = {} if quality else d.get("rotation", {})
     if rot.get("ready"):
         src, dst = rot.get("from"), rot.get("to")
         lines.append(f"<b>로테이션</b> {KO[src]} → {KO[dst]}" if src and dst
@@ -57,7 +60,7 @@ def build_message(d: dict) -> str:
             lines.append(f"  {KO[r['market']]} {r['share']:>5.1f}% {arrow}{abs(r['delta'])}")
         lines.append("")
 
-    if d["alerts"]:
+    if d["alerts"] and not quality:
         lines.append("<b>발화 신호</b>")
         for a in d["alerts"]:
             lines.append(
@@ -65,14 +68,14 @@ def build_message(d: dict) -> str:
                 f"${a['flow_usd']/1e9:+.2f}B · z {a['z20']:.2f} · {'+'.join(a['triggers'])}"
             )
     else:
-        lines.append("발화 조건을 충족한 시장 없음")
+        lines.append("신호 판단 보류" if quality else "발화 조건을 충족한 시장 없음")
 
     for s in d.get("suppressed", []):
         lines.append(f"  ⚪ {KO[s['market']]} — {s['suppressed']}로 억제")
 
     # 시장별 한 줄 요약 — 상세는 대시보드로
     lines.append("")
-    lines.append("<b>시장별 순유입</b>")
+    lines.append("<b>시장별 순유입</b>" + (" (이전 관측 참고값)" if quality else ""))
     for m in ("KR", "JP", "EU", "US"):
         det = d.get("detail", {}).get(m)
         if not det:
@@ -87,6 +90,9 @@ def build_message(d: dict) -> str:
     if bad:
         lines.append("")
         lines.append("⚠️ 수집 실패: " + ", ".join(h["collector"] for h in bad))
+
+    if any(h.get("status") == "unavailable" for h in d.get("health", [])):
+        lines.append("⚠️ KRX 원천 수급 미수집 — 한국은 ETF 대리지표")
 
     url = dashboard_url(d)
     if url:
@@ -135,3 +141,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

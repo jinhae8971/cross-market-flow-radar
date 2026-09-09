@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import os
 from typing import Sequence
 
@@ -137,6 +138,28 @@ def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE,
         print("[etf_flow] AUM 스냅샷 전량 실패 — 캐시 보존")
         return []
 
+    # A dated price does not establish the date of totalAssets. An unchanged
+    # AUM would turn price returns into fictitious flows. Fail the whole batch
+    # rather than silently changing market coverage or advancing the cache.
+    if set(snap) != set(syms):
+        raise ValueError("ETF AUM 일부 결측 — 계산 보류, 캐시 보존")
+    if prev:
+        if set(prev) != set(syms):
+            raise ValueError("ETF 이전 AUM 일부 결측 — 기준점 확인 필요")
+        unchanged = [s for s in syms if snap[s]["aum"] == prev[s]["aum"]]
+        if unchanged:
+            raise ValueError("AUM 갱신 미확인 — 계산 보류: " + ", ".join(unchanged))
+        if prev_session != closes.index[-2].date().isoformat():
+            # A multi-session delta cannot be assigned to one day's return.
+            _save_cache(cache_path, {"session": session.isoformat(),
+                                     "latest": snap, "prev_session": prev_session})
+            raise ValueError("AUM 세션 공백 — 기준점 재설정, 해당 구간 계산 생략")
+        for sym in syms:
+            values = [snap[sym]["aum"], prev[sym]["aum"],
+                      closes[sym].iloc[-1], closes[sym].iloc[-2]]
+            if not all(math.isfinite(float(v)) and float(v) > 0 for v in values):
+                raise ValueError("AUM/종가 비정상 — 계산 보류: " + sym)
+
     records: list[FlowRecord] = []
     if prev:
         for sym, cur in snap.items():
@@ -222,3 +245,4 @@ def backfill(period: str = "1y") -> list[FlowRecord]:
                 )
             )
     return records
+
