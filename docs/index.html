@@ -162,6 +162,12 @@ function detailHTML(x){
 
 fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
   const KO=d.markets;
+  if((d.quality_warnings||[]).length){
+    const warning=document.createElement("p");
+    warning.textContent="⚠️ 신규 판단 보류 · 아래 값은 이전 관측 참고값 · "+d.quality_warnings.join(" / ");
+    document.getElementById("stamp").after(warning);
+    d.rotation={ready:false,rows:[]}; d.alerts=[];
+  }
   document.getElementById('stamp').textContent =
     `기준일 ${d.as_of} · 레코드 ${d.rows_total.toLocaleString()}건`;
 
@@ -240,3 +246,4 @@ fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
 </script>
 </body>
 </html>
+

@@ -302,3 +302,47 @@ class TestMask(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAumQuality(unittest.TestCase):
+    def check_collect(self, changed=True, gap=False, invalid=False):
+        from unittest.mock import patch
+        from smr.collectors import etf_flow
+        syms = [s for group in etf_flow.UNIVERSE.values() for s in group]
+        closes = pd.DataFrame({s: [100., 101.] for s in syms},
+                              index=pd.to_datetime(['2026-09-04', '2026-09-08']))
+        snap = {s: {'aum': 1020. if changed else 1000.} for s in syms}
+        if invalid:
+            closes.iloc[-1, 0] = float('nan')
+        before = {'session': '2026-09-03' if gap else '2026-09-04',
+                  'latest': {s: {'aum': 1000.} for s in syms}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, 'aum.json')
+            with open(path, 'w') as f:
+                json.dump(before, f)
+            with patch.object(etf_flow, '_snapshot', return_value=snap):
+                with self.assertRaises(ValueError):
+                    etf_flow.collect(cache_path=path, closes=closes)
+            with open(path) as f:
+                after = json.load(f)
+            self.assertEqual(after['session'], '2026-09-08' if gap else before['session'])
+            if not gap:
+                self.assertEqual(before, after)
+
+    def test_unchanged_aum_does_not_create_inverse_price_flow(self):
+        self.check_collect(changed=False)
+
+    def test_session_gap_rebaselines_without_daily_flow(self):
+        self.check_collect(gap=True)
+
+    def test_nan_price_preserves_cache(self):
+        self.check_collect(invalid=True)
+
+    def test_quality_warning_suppresses_rotation_in_message(self):
+        import notify
+        d = {'as_of': '2026-09-08', 'alerts': [], 'detail': {},
+             'quality_warnings': ['AUM 갱신 미확인'],
+             'rotation': {'ready': True, 'from': 'EU', 'to': 'US', 'rows': []}}
+        msg = notify.build_message(d)
+        self.assertIn('판단 보류', msg)
+        self.assertNotIn('유럽 → 미국', msg)

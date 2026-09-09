@@ -236,36 +236,10 @@
  "alerts": [],
  "suppressed": [],
  "rotation": {
-  "ready": true,
-  "rows": [
-   {
-    "market": "US",
-    "share": 25.5,
-    "delta": 12.6,
-    "score": 38.1
-   },
-   {
-    "market": "KR",
-    "share": 23.1,
-    "delta": 9.2,
-    "score": 32.3
-   },
-   {
-    "market": "JP",
-    "share": 20.2,
-    "delta": 7.4,
-    "score": 27.6
-   },
-   {
-    "market": "EU",
-    "share": 31.3,
-    "delta": -29.1,
-    "score": 2.2
-   }
-  ],
-  "as_of": "2026-09-08",
-  "from": "EU",
-  "to": "US"
+  "ready": false,
+  "rows": [],
+  "from": null,
+  "to": null
  },
  "series": {
   "EU": [
@@ -1935,5 +1909,8 @@
   }
  ],
  "rows_total": 4155,
- "rows_added": 15
+ "rows_added": 15,
+ "quality_warnings": [
+  "9/8 ETF AUM 15개 중 14개 미변경 — 해당 관측과 파생 신호 검증 필요"
+ ]
 }
