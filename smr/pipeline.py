@@ -94,6 +94,24 @@ def _last_session(store_path: str, source: str) -> dt.date | None:
     return None if d.empty else pd.to_datetime(d["ts"]).max().date()
 
 
+def _comparable_session(sig: pd.DataFrame, window: int = 10) -> dt.date | None:
+    """네 시장을 나란히 비교할 수 있는 가장 최근 날짜.
+
+    단순 최대 날짜를 쓰면 안 된다. 소스마다 공시 시점이 다르므로(한국 원천은
+    당일, 미국 ETF는 마감 후) 한 시장만 하루 앞서 들어오는 일이 흔하고,
+    그날을 기준일로 삼으면 크로스마켓 비교가 성립하지 않는다.
+    최근 window 세션 안에 전 시장이 모인 날이 없으면 최대 날짜를 돌려주고,
+    커버리지 결손은 신뢰도 게이트가 판단하게 둔다.
+    """
+    if sig.empty:
+        return None
+    per_day = sig.groupby("ts")["market"].nunique().sort_index(ascending=False)
+    for ts, n in per_day.head(window).items():
+        if n >= len(MARKET_KO):
+            return ts.date()
+    return per_day.index[0].date()
+
+
 def run(seed: bool = False, store_path: str = "data/flows.parquet",
         out_path: str = "docs/data.json") -> dict:
     health = []
@@ -198,7 +216,7 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         kept = []
         rot = {"ready": False, "rows": [], "from": None, "to": None}
 
-    as_of = sig["ts"].max().date() if not sig.empty else None
+    as_of = _comparable_session(sig)
     # 신선도는 달력일이 아니라 '놓친 세션 수'로 잰다. 발송 게이트의 입력값이다.
     stale_sessions = 0
     if as_of and latest_session and hasattr(closes, "index"):

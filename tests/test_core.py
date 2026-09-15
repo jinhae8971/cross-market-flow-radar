@@ -590,3 +590,22 @@ class TestPrimaryActors(unittest.TestCase):
         ])
         agg = signals.aggregate(df)
         self.assertAlmostEqual(agg["net_flow_usd"].iloc[0], -2298.0 * 0.9)
+
+
+class TestComparableSession(unittest.TestCase):
+    def _sig(self, rows):
+        return pd.DataFrame([{"ts": pd.Timestamp(d), "market": m}
+                             for d, ms in rows for m in ms])
+
+    def test_picks_last_day_all_markets_are_present(self):
+        from smr import pipeline
+        sig = self._sig([("2026-09-11", ["KR", "JP", "EU", "US"]),
+                         ("2026-09-14", ["KR"])])   # 한국만 하루 앞서 들어옴
+        self.assertEqual(pipeline._comparable_session(sig),
+                         dt.date(2026, 9, 11))
+
+    def test_falls_back_to_latest_when_never_complete(self):
+        from smr import pipeline
+        sig = self._sig([("2026-09-10", ["KR"]), ("2026-09-11", ["KR", "JP"])])
+        self.assertEqual(pipeline._comparable_session(sig),
+                         dt.date(2026, 9, 11))
