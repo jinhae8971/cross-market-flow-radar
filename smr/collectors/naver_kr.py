@@ -56,7 +56,10 @@ class LayoutChanged(RuntimeError):
 
 
 def _rows(html: str) -> list[tuple[dt.date, dict[str, float]]]:
-    body = html[html.find("<tbody"):] if "<tbody" in html else html
+    # 이 페이지에는 <tbody>가 없다. find()가 -1을 돌려주면 html[-1:]이 되어
+    # 표 전체를 잃으므로, 찾지 못하면 문서 전체를 훑는다.
+    i = html.find("<tbody")
+    body = html[i:] if i >= 0 else html
     out = []
     for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", body, re.S):
         cells = [re.sub(r"<[^>]+>", "", c).replace("\xa0", " ").strip()
@@ -96,7 +99,13 @@ def _verify(vals: dict[str, float]) -> None:
 def collect(known: set | None = None, market: str = "01",
             max_days: int = 20) -> list[FlowRecord]:
     """최근 영업일 순매수. known에 있는 날짜는 건너뛴다. market 01=KOSPI."""
-    r = requests.get(URL, params={"sosok": market}, headers=HEADERS, timeout=30)
+    # bizdate를 명시해야 최신 영업일 표가 안정적으로 내려온다.
+    bizdate = (dt.date.today() - dt.timedelta(days=1))
+    while bizdate.weekday() >= 5:
+        bizdate -= dt.timedelta(days=1)
+    r = requests.get(URL, params={"bizdate": bizdate.strftime("%Y%m%d"),
+                                  "sosok": market},
+                     headers=HEADERS, timeout=30)
     r.raise_for_status()
     r.encoding = "euc-kr"
     rows = _rows(r.text)
