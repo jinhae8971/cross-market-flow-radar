@@ -51,7 +51,16 @@ jobs:
                       r = requests.get(url, headers=h, timeout=25)
                   body = r.text[:500].replace("\n", " ")
                   print(f"--- {name}: {r.status_code} len={len(r.text)}")
-                  print(f"    {body}")
+                  if name == "naver_deal_trend_day" and r.status_code == 200:
+                      r.encoding = "euc-kr"
+                      import re as _re
+                      txt = _re.sub(r"<[^>]+>", "|", r.text)
+                      txt = _re.sub(r"[ \t\xa0]+", " ", txt)
+                      lines = [l.strip() for l in txt.split("\n") if l.strip(" |")]
+                      for l in lines[:70]:
+                          print("   >", l[:200])
+                  else:
+                      print(f"    {body}")
               except Exception as exc:
                   print(f"--- {name}: ERROR {type(exc).__name__} {exc}")
           EOF
