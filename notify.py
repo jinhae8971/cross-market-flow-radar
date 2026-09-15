@@ -138,8 +138,14 @@ def build_message(d: dict) -> str:
             # 수집기 이름만 적으면 원인을 보려고 매번 Actions 로그를 열어야 한다.
             lines.append(f"⚠️ 수집 실패 · {h['collector']}: {h.get('error', '사유 미기록')}")
 
-    if any(h.get("status") == "unavailable" for h in d.get("health", [])):
-        lines.append("⚠️ KRX 원천 수급 미수집 — 한국은 ETF 대리지표")
+    status = {h.get("collector"): h.get("status") for h in d.get("health", [])}
+    if status.get("krx") == "unconfigured":
+        # 조치 가능한 상태는 조치 방법까지 적는다. '미수집'만 적으면
+        # 매일 같은 줄을 보면서도 무엇을 해야 할지 알 수 없다.
+        lines.append("⚠️ KRX 인증키 미등록 — 한국은 ETF 대리지표 "
+                     "(openapi.krx.co.kr 발급 후 KRX_API_KEY secret 등록)")
+    elif status.get("krx") == "unavailable":
+        lines.append("⚠️ KRX 신규 공시 없음 — 한국은 ETF 대리지표")
 
     url = dashboard_url(d)
     if url:

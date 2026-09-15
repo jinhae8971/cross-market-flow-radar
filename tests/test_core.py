@@ -440,3 +440,62 @@ class TestSourceDedup(unittest.TestCase):
         agg = signals.aggregate(df)
         self.assertEqual(len(agg), 1)
         self.assertAlmostEqual(agg['net_flow_usd'].iloc[0], 75.0)
+
+
+class TestKoreaGapFill(unittest.TestCase):
+    def test_candidate_days_skips_weekends(self):
+        from smr.collectors import korea
+        # 2026-09-15는 화요일 → 직전 5영업일은 주말을 건너뛴다
+        days = korea._candidate_days(5, today=dt.date(2026, 9, 15))
+        self.assertTrue(all(d.weekday() < 5 for d in days))
+        self.assertEqual(days[-1], dt.date(2026, 9, 14))
+        self.assertNotIn(dt.date(2026, 9, 13), days)   # 일요일
+
+    def test_collect_only_requests_missing_days(self):
+        from unittest.mock import patch
+        from smr.collectors import korea
+        asked = []
+
+        def fake(day, key):
+            asked.append(day)
+            return []
+
+        known = {dt.date(2026, 9, 10), dt.date(2026, 9, 11)}
+        with patch.dict(os.environ, {"KRX_API_KEY": "k"}):
+            with patch.object(korea, "_fetch_day", fake):
+                korea.collect(known=known, lookback=5)
+        self.assertTrue(set(asked).isdisjoint(known))
+        self.assertTrue(asked)
+
+    def test_missing_key_raises_unconfigured_not_silent_empty(self):
+        from unittest.mock import patch
+        from smr.collectors import korea
+        with patch.dict(os.environ, {"KRX_API_KEY": ""}):
+            with patch.object(korea, "_fetch_day", lambda d, k: []):
+                with self.assertRaises(korea.KrxUnconfigured):
+                    korea.collect()
+
+    def test_holiday_empty_response_is_not_an_error(self):
+        from unittest.mock import patch
+        from smr.collectors import korea
+        with patch.dict(os.environ, {"KRX_API_KEY": "k"}):
+            with patch.object(korea, "_fetch_day", lambda d, k: []):
+                self.assertEqual(korea.collect(lookback=3), [])
+
+
+class TestKrxStatusInBrief(unittest.TestCase):
+    def _msg(self, status):
+        import notify
+        return notify.build_message({
+            "as_of": "2026-09-11", "stale_sessions": 0, "alerts": [],
+            "detail": {}, "quality_warnings": [], "rotation": {"ready": False},
+            "health": [{"collector": "krx", "ok": True, "status": status}]})
+
+    def test_unconfigured_tells_the_operator_what_to_do(self):
+        msg = self._msg("unconfigured")
+        self.assertIn("KRX_API_KEY", msg)
+        self.assertIn("openapi.krx.co.kr", msg)
+
+    def test_unavailable_does_not_claim_a_key_problem(self):
+        msg = self._msg("unavailable")
+        self.assertNotIn("KRX_API_KEY", msg)

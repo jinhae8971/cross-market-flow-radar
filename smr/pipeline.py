@@ -29,6 +29,16 @@ def _safe(name: str, fn, *a, **kw):
         return [], {"collector": name, "ok": False, "error": str(exc)[:200]}
 
 
+def _sessions_of(store_path: str, source: str) -> set:
+    """이미 확보한 날짜 집합. 같은 날을 반복 조회하지 않기 위한 입력."""
+    try:
+        df = FlowStore(store_path).load()
+    except Exception:
+        return set()
+    d = df[df["source"] == source]
+    return set() if d.empty else set(pd.to_datetime(d["ts"]).dt.date)
+
+
 def _last_session(store_path: str, source: str) -> dt.date | None:
     """저장소에 남은 특정 source의 마지막 관측일. 대리지표 시작점을 정한다."""
     try:
@@ -90,10 +100,16 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
     records += r
     health.append(h)
 
-    r, h = _safe("krx", korea.collect)
+    known_kr = _sessions_of(store_path, "krx")
+    r, h = _safe("krx", korea.collect, known=known_kr)
     records += r
     if h.get("ok") and not r:
-        h.update(status="unavailable", error="KRX 원천 수급 미수집 — 한국은 ETF 대리지표")
+        h.update(status="unavailable",
+                 error="KRX 신규 공시 없음 — 한국은 ETF 대리지표")
+    elif not h.get("ok") and "KRX_API_KEY" in h.get("error", ""):
+        # 미설정은 장애가 아니다. 실패로 세면 quality_warnings가 상시 채워져
+        # 알림·로테이션이 영구히 보류되고, 동시에 진짜 장애가 묻힌다.
+        h.update(ok=True, status="unconfigured", records=0)
     health.append(h)
 
     store = FlowStore(store_path)
