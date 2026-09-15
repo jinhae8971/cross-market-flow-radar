@@ -499,3 +499,94 @@ class TestKrxStatusInBrief(unittest.TestCase):
     def test_unavailable_does_not_claim_a_key_problem(self):
         msg = self._msg("unavailable")
         self.assertNotIn("KRX_API_KEY", msg)
+
+
+NAVER_HTML = """<table class="type_1"><thead></thead><tbody>
+<tr><td>26.09.11</td><td>18,675</td><td>-22,984</td><td>-12,184</td>
+<td>-10,345</td><td>-17</td><td>-4,703</td><td>7</td><td>216</td>
+<td>2,659</td><td>16,493</td></tr>
+<tr><td>26.09.10</td><td>3,802</td><td>-26,217</td><td>5,744</td>
+<td>11,628</td><td>155</td><td>-4,803</td><td>24</td><td>184</td>
+<td>-1,444</td><td>16,671</td></tr>
+</tbody></table>"""
+
+
+class TestNaverKr(unittest.TestCase):
+    def test_parses_rows_with_confirmed_column_order(self):
+        from smr.collectors import naver_kr
+        rows = naver_kr._rows(NAVER_HTML)
+        self.assertEqual(len(rows), 2)
+        day, vals = rows[0]
+        self.assertEqual(day, dt.date(2026, 9, 11))
+        self.assertEqual(vals["외국인"], -22984.0)
+        self.assertEqual(vals["연기금등"], 2659.0)
+
+    def test_verify_accepts_real_layout(self):
+        from smr.collectors import naver_kr
+        naver_kr._verify(naver_kr._rows(NAVER_HTML)[0][1])   # 예외 없어야 함
+
+    def test_shifted_columns_are_rejected_not_silently_used(self):
+        from smr.collectors import naver_kr
+        shifted = NAVER_HTML.replace("<td>18,675</td>", "<td>99,999</td>")
+        with self.assertRaises(naver_kr.LayoutChanged):
+            naver_kr._verify(naver_kr._rows(shifted)[0][1])
+
+
+class TestConfidenceGate(unittest.TestCase):
+    def _df(self, pairs):
+        return to_frame([rec(dt.date(2026, 9, 11), m, 1.0, conf=c,
+                             source="s") for m, c in pairs])
+
+    def test_partial_coverage_scales_the_score_down(self):
+        from smr import pipeline
+        score, br = pipeline.confidence_score(
+            self._df([("US", 0.95), ("EU", 0.95)]), dt.date(2026, 9, 11))
+        self.assertAlmostEqual(score, 0.95 * 0.5)
+        self.assertIn("한국", br["결손"])
+
+    def test_full_coverage_high_quality_passes(self):
+        from smr import pipeline
+        score, _ = pipeline.confidence_score(
+            self._df([("KR", 0.95), ("JP", 0.95), ("EU", 0.95), ("US", 0.95)]),
+            dt.date(2026, 9, 11))
+        self.assertGreaterEqual(score, pipeline.MIN_CONFIDENCE)
+
+    def test_proxy_only_run_falls_below_threshold(self):
+        from smr import pipeline
+        score, _ = pipeline.confidence_score(
+            self._df([("KR", 0.5), ("JP", 0.5), ("EU", 0.5), ("US", 0.5)]),
+            dt.date(2026, 9, 11))
+        self.assertLess(score, pipeline.MIN_CONFIDENCE)
+
+    def test_market_quality_is_not_weighted_by_instrument_count(self):
+        from smr import pipeline
+        # 유럽 ETF 6개 vs 한국 1개 — 행 단위 평균이면 유럽이 6배 무거워진다
+        pairs = [("EU", 0.5)] * 6 + [("KR", 0.9), ("JP", 0.9), ("US", 0.9)]
+        score, _ = pipeline.confidence_score(self._df(pairs),
+                                             dt.date(2026, 9, 11))
+        self.assertAlmostEqual(score, (0.5 + 0.9 * 3) / 4)
+
+
+class TestPrimaryActors(unittest.TestCase):
+    def test_domestic_actors_do_not_cancel_the_market_to_zero(self):
+        from smr import signals
+        day = dt.date(2026, 9, 11)
+        df = to_frame([
+            rec(day, "KR", -2298.0, actor="foreign", conf=0.9, source="naver_kr"),
+            rec(day, "KR", 1867.0, actor="retail", conf=0.9, source="naver_kr"),
+            rec(day, "KR", -1218.0, actor="institution", conf=0.9, source="naver_kr"),
+        ])
+        agg = signals.aggregate(df)
+        self.assertEqual(len(agg), 1)
+        self.assertAlmostEqual(agg["net_flow_usd"].iloc[0], -2298.0 * 0.9)
+
+    def test_higher_confidence_source_supersedes_proxy_for_same_actor(self):
+        from smr import signals
+        day = dt.date(2026, 9, 11)
+        df = to_frame([
+            rec(day, "KR", -2298.0, actor="foreign", conf=0.9, source="naver_kr"),
+            rec(day, "KR", 500.0, actor="foreign", conf=0.5,
+                source="etf_moneyflow_proxy"),
+        ])
+        agg = signals.aggregate(df)
+        self.assertAlmostEqual(agg["net_flow_usd"].iloc[0], -2298.0 * 0.9)

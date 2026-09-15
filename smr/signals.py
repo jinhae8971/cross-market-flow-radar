@@ -10,6 +10,14 @@ import numpy as np
 import pandas as pd
 
 
+# 시장 순유입으로 합산할 주체. 국내 주체까지 더하면 안 된다 —
+# 한 시장의 순매수는 주체 간 상계로 정의상 0이 되므로, 개인·기관을 함께
+# 더하는 순간 한국 계열이 통째로 0 근처로 붕괴한다. 다른 시장의 ETF(foreign)·
+# COT(spec)와 의미를 맞추려면 역외/투기 주체만 센다. 국내 주체는 저장은
+# 하되 detail의 주체별 분해에서만 쓴다.
+PRIMARY_ACTORS = ("foreign", "spec")
+
+
 def aggregate(df: pd.DataFrame, freq: str = "D") -> pd.DataFrame:
     """시장 × 기간 순유입(USD). confidence를 가중치로 쓴다.
 
@@ -20,12 +28,16 @@ def aggregate(df: pd.DataFrame, freq: str = "D") -> pd.DataFrame:
         return pd.DataFrame(columns=["ts", "market", "net_flow_usd"])
     d = df.copy()
     d["ts"] = pd.to_datetime(d["ts"])
-    # 같은 종목·같은 날을 두 소스가 덮으면(실측 AUM + 대리지표) 합산 시 이중계상된다.
-    # 저장소 키에는 source가 포함되므로 upsert가 걸러주지 못한다. 여기서
-    # 신뢰도가 높은 관측만 남긴다 — 실측이 복구되면 자동으로 대리지표를 대체한다.
-    d = (d.sort_values("confidence", ascending=False)
-           .drop_duplicates(subset=["ts", "market", "actor", "instrument"],
-                            keep="first"))
+    d = d[d["actor"].isin(PRIMARY_ACTORS)]
+    if d.empty:
+        return pd.DataFrame(columns=["ts", "market", "net_flow_usd"])
+    # 같은 (날짜·시장·주체)를 두 소스가 덮으면 합산 시 이중계상된다. 예를 들어
+    # 한국은 네이버 원천(0.9)과 ETF 대리지표(0.5)가 동시에 '외국인'을 설명한다.
+    # 종목 단위로 지우면 안 된다 — 유럽처럼 여러 ETF를 정당하게 합산하는
+    # 경우까지 잘려나간다. 그래서 가장 신뢰도 높은 소스만 남기고, 그 소스에
+    # 속한 행은 전부 보존한다.
+    best = d.groupby(["ts", "market", "actor"])["confidence"].transform("max")
+    d = d[d["confidence"] >= best]
     d["weighted"] = d["net_flow_usd"] * d["confidence"]
     g = (
         d.groupby(["market", pd.Grouper(key="ts", freq=freq)])["weighted"]

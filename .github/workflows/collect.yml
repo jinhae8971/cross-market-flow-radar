@@ -55,6 +55,7 @@ jobs:
           SEED: ${{ inputs.seed }}
           KRX_API_KEY: ${{ secrets.KRX_API_KEY }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
+          MIN_CONFIDENCE: ${{ vars.MIN_CONFIDENCE }}
           TZ: "Asia/Seoul"
         run: |
           set -euo pipefail
@@ -102,8 +103,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          REASON='Flow Radar 수집 실패 - AUM 스냅샷은 소급 불가하므로 즉시 재실행 필요'
+          if [[ -f docs/halt.json ]]; then
+            REASON=$(python3 -c "import json;h=json.load(open('docs/halt.json',encoding='utf-8'));b=' / '.join(f'{k} {v}' for k,v in h['breakdown'].items());print(f\"Flow Radar 중단 - 신뢰도 {h['confidence']} < 기준 {h['threshold']} ({b}). 산출물 미갱신 - 대시보드는 as_of {h['as_of']} 유지\")")
+          fi
           curl -sS -X POST \
             "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=$(printf '%s\n%s' 'Flow Radar 수집 실패 - AUM 스냅샷은 소급 불가하므로 즉시 재실행 필요' "${RUN_URL}")" \
+            --data-urlencode "text=$(printf '%s\n%s' "${REASON}" "${RUN_URL}")" \
             || true

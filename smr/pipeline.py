@@ -14,10 +14,55 @@ import pandas as pd
 
 from . import detail, repair, rotation, signals
 from .calendar_mask import masked
-from .collectors import cot, etf_flow, korea
+from .collectors import cot, etf_flow, korea, naver_kr
 from .schema import FlowStore, to_frame
 
 MARKET_KO = {"KR": "한국", "JP": "일본", "EU": "유럽", "US": "미국"}
+
+# 이 점수 아래로 떨어지면 산출물을 갱신하지 않고 작업 자체를 중단한다.
+# repo variable이 비어 있으면 빈 문자열이 들어오므로 or로 받아낸다.
+MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE") or "0.60")
+
+
+class LowConfidence(RuntimeError):
+    """신뢰도 미달 — 산출물을 쓰지 않고 실행을 중단시킨다.
+
+    낮은 신뢰도의 값에 경고를 달아 내보내는 방식은 이미 한 번 실패했다.
+    경고는 며칠이면 배경이 되고 숫자는 그대로 읽힌다. 그래서 경고가 아니라
+    중단으로 처리한다 — data.json을 덮지 않으므로 대시보드는 마지막 정상
+    상태를 유지하고, 종료코드가 0이 아니므로 워크플로우가 실패 통지를 보낸다.
+    """
+
+    def __init__(self, score: float, breakdown: dict) -> None:
+        self.score = score
+        self.breakdown = breakdown
+        super().__init__(
+            f"신뢰도 {score:.2f} < 기준 {MIN_CONFIDENCE:.2f} — 산출물 갱신 중단: "
+            + ", ".join(f"{k} {v}" for k, v in breakdown.items()))
+
+
+def confidence_score(df, as_of):
+    """최신 관측일 기준 신뢰도 = 관측 품질 x 시장 커버리지.
+
+    곱하는 이유: 네 시장 중 하나만 고품질로 들어와도 평균 신뢰도는 높게
+    나온다. 크로스마켓 비교가 목적이므로 커버리지 결손은 품질 저하와 같은
+    무게로 다뤄야 한다.
+    """
+    if df.empty or as_of is None:
+        return 0.0, {"관측": "없음"}
+    d = df[(pd.to_datetime(df["ts"]).dt.date == as_of)
+           & (df["actor"].isin(signals.PRIMARY_ACTORS))]
+    if d.empty:
+        return 0.0, {"관측": "없음"}
+    # 시장별로 먼저 평균을 낸 뒤 시장 간 평균을 낸다. 행 단위 평균을 쓰면
+    # ETF를 6개 담는 유럽이 1개 계열인 한국보다 6배 무겁게 반영된다.
+    quality = float(d.groupby("market")["confidence"].mean().mean())
+    covered = sorted(set(d["market"]))
+    coverage = len(covered) / len(MARKET_KO)
+    missing = [MARKET_KO[m] for m in MARKET_KO if m not in covered]
+    return quality * coverage, {"품질": f"{quality:.2f}",
+                                "커버리지": f"{len(covered)}/{len(MARKET_KO)}",
+                                "결손": ",".join(missing) or "없음"}
 
 
 def _safe(name: str, fn, *a, **kw):
@@ -100,7 +145,8 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
     records += r
     health.append(h)
 
-    known_kr = _sessions_of(store_path, "krx")
+    known_kr = (_sessions_of(store_path, "krx")
+                | _sessions_of(store_path, "naver_kr"))
     r, h = _safe("krx", korea.collect, known=known_kr)
     records += r
     if h.get("ok") and not r:
@@ -111,6 +157,12 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         # 알림·로테이션이 영구히 보류되고, 동시에 진짜 장애가 묻힌다.
         h.update(ok=True, status="unconfigured", records=0)
     health.append(h)
+
+    # KRX 원천이 없으면 키가 필요 없는 네이버 표로 같은 해상도를 확보한다.
+    if not r:
+        nr, nh = _safe("naver_kr", naver_kr.collect, known=known_kr)
+        records += nr
+        health.append(nh)
 
     store = FlowStore(store_path)
     added = store.upsert(to_frame(records))
@@ -152,6 +204,23 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
     if as_of and latest_session and hasattr(closes, "index"):
         stale_sessions = sum(1 for d in closes.index if d.date() > as_of)
 
+    score, breakdown = confidence_score(df, as_of)
+    if score < MIN_CONFIDENCE:
+        # 중단 사유만 별도 파일로 남긴다. data.json은 손대지 않으므로
+        # 대시보드는 마지막 정상 상태를 그대로 보여준다.
+        halt = {"halted_at": dt.datetime.now(dt.timezone.utc).isoformat(
+                    timespec="seconds"),
+                "as_of": as_of.isoformat() if as_of else None,
+                "confidence": round(score, 3),
+                "threshold": MIN_CONFIDENCE,
+                "breakdown": breakdown,
+                "health": health}
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open(os.path.join(os.path.dirname(out_path) or ".", "halt.json"),
+                  "w", encoding="utf-8") as f:
+            json.dump(halt, f, ensure_ascii=False, indent=1)
+        raise LowConfidence(score, breakdown)
+
     recent = sig[sig["ts"] >= sig["ts"].max() - pd.Timedelta(days=120)]
     series = {
         m: [
@@ -169,6 +238,8 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         "as_of": as_of.isoformat() if as_of else None,
         "latest_session": latest_session.isoformat() if latest_session else None,
         "stale_sessions": int(stale_sessions),
+        "confidence": round(score, 3),
+        "confidence_breakdown": breakdown,
         "mode": "degraded" if degraded else "normal",
         "markets": MARKET_KO,
         "alerts": kept,
