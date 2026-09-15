@@ -1,0 +1,57 @@
+name: probe-kr-sources
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - name: Probe keyless KR investor-flow sources
+        run: |
+          python - << 'EOF'
+          import requests
+          H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                             "AppleWebKit/537.36 (KHTML, like Gecko) "
+                             "Chrome/124.0 Safari/537.36",
+               "Accept-Language": "ko-KR,ko;q=0.9"}
+          targets = [
+            ("naver_index_investor",
+             "https://finance.naver.com/sise/sise_index_investor.naver?code=KOSPI",
+             {"Referer": "https://finance.naver.com/"}),
+            ("naver_deal_trend_day",
+             "https://finance.naver.com/sise/investorDealTrendDay.naver?bizdate=20260911&sosok=01",
+             {"Referer": "https://finance.naver.com/sise/investorDealTrend.naver"}),
+            ("naver_mobile_api",
+             "https://m.stock.naver.com/api/index/KOSPI/investor",
+             {"Referer": "https://m.stock.naver.com/"}),
+            ("daum_investor",
+             "https://finance.daum.net/api/investor/days?page=1&perPage=10&market=KOSPI",
+             {"Referer": "https://finance.daum.net/domestic/investor",
+              "X-Requested-With": "XMLHttpRequest"}),
+            ("krx_legacy",
+             "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
+             {"Referer": "http://data.krx.co.kr/"}),
+          ]
+          for name, url, extra in targets:
+              h = dict(H); h.update(extra)
+              try:
+                  if name == "krx_legacy":
+                      r = requests.post(url, headers=h, timeout=25, data={
+                          "bld": "dbms/MDC/STAT/standard/MDCSTAT02203",
+                          "mktId": "STK", "inqTpCd": "1", "trdVolVal": "2",
+                          "askBid": "3", "strtDd": "20260911",
+                          "endDd": "20260911", "money": "1",
+                          "csvxls_isNo": "false"})
+                  else:
+                      r = requests.get(url, headers=h, timeout=25)
+                  body = r.text[:500].replace("\n", " ")
+                  print(f"--- {name}: {r.status_code} len={len(r.text)}")
+                  print(f"    {body}")
+              except Exception as exc:
+                  print(f"--- {name}: ERROR {type(exc).__name__} {exc}")
+          EOF
