@@ -18,6 +18,21 @@ import pandas as pd
 PRIMARY_ACTORS = ("foreign", "spec")
 
 
+def preferred(d: pd.DataFrame) -> pd.DataFrame:
+    """(날짜·시장·주체)마다 가장 신뢰도 높은 소스의 행만 남긴다.
+
+    같은 키를 두 소스가 덮으면 합산 시 이중계상된다. 한국은 네이버 원천(0.9)과
+    ETF 대리지표(0.5)가 동시에 '외국인'을 설명하는 것이 그 예다. 종목 단위로
+    지우면 안 된다 — 유럽처럼 여러 ETF를 정당하게 합산하는 경우까지 잘려나간다.
+    그래서 최고 신뢰도에 해당하는 행은 전부 보존한다.
+
+    신호 집계와 신뢰도 산정이 반드시 같은 행 집합을 봐야 하므로 함수로 뽑았다.
+    (분리돼 있던 동안 신뢰도가 대리지표 행까지 평균에 넣어 과소평가됐다.)
+    """
+    best = d.groupby(["ts", "market", "actor"])["confidence"].transform("max")
+    return d[d["confidence"] >= best]
+
+
 def aggregate(df: pd.DataFrame, freq: str = "D") -> pd.DataFrame:
     """시장 × 기간 순유입(USD). confidence를 가중치로 쓴다.
 
@@ -31,13 +46,7 @@ def aggregate(df: pd.DataFrame, freq: str = "D") -> pd.DataFrame:
     d = d[d["actor"].isin(PRIMARY_ACTORS)]
     if d.empty:
         return pd.DataFrame(columns=["ts", "market", "net_flow_usd"])
-    # 같은 (날짜·시장·주체)를 두 소스가 덮으면 합산 시 이중계상된다. 예를 들어
-    # 한국은 네이버 원천(0.9)과 ETF 대리지표(0.5)가 동시에 '외국인'을 설명한다.
-    # 종목 단위로 지우면 안 된다 — 유럽처럼 여러 ETF를 정당하게 합산하는
-    # 경우까지 잘려나간다. 그래서 가장 신뢰도 높은 소스만 남기고, 그 소스에
-    # 속한 행은 전부 보존한다.
-    best = d.groupby(["ts", "market", "actor"])["confidence"].transform("max")
-    d = d[d["confidence"] >= best]
+    d = preferred(d)
     d["weighted"] = d["net_flow_usd"] * d["confidence"]
     g = (
         d.groupby(["market", pd.Grouper(key="ts", freq=freq)])["weighted"]

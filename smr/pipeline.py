@@ -52,6 +52,7 @@ def confidence_score(df, as_of):
         return 0.0, {"관측": "없음"}
     d = df[(pd.to_datetime(df["ts"]).dt.date == as_of)
            & (df["actor"].isin(signals.PRIMARY_ACTORS))]
+    d = signals.preferred(d)   # 집계와 같은 행 집합을 봐야 한다
     if d.empty:
         return 0.0, {"관측": "없음"}
     # 시장별로 먼저 평균을 낸 뒤 시장 간 평균을 낸다. 행 단위 평균을 쓰면

@@ -609,3 +609,24 @@ class TestComparableSession(unittest.TestCase):
         sig = self._sig([("2026-09-10", ["KR"]), ("2026-09-11", ["KR", "JP"])])
         self.assertEqual(pipeline._comparable_session(sig),
                          dt.date(2026, 9, 11))
+
+
+class TestConfidenceUsesSameRowsAsAggregate(unittest.TestCase):
+    def test_proxy_rows_do_not_drag_down_a_superseded_market(self):
+        from smr import pipeline
+        day = dt.date(2026, 9, 11)
+        df = to_frame([
+            rec(day, "KR", -10.0, actor="foreign", conf=0.9, source="naver_kr"),
+            rec(day, "KR", 1.0, actor="foreign", conf=0.5,
+                source="etf_moneyflow_proxy"),
+            rec(day, "JP", 1.0, actor="foreign", conf=0.5,
+                source="etf_moneyflow_proxy"),
+            rec(day, "EU", 1.0, actor="foreign", conf=0.5,
+                source="etf_moneyflow_proxy"),
+            rec(day, "US", 1.0, actor="foreign", conf=0.5,
+                source="etf_moneyflow_proxy"),
+        ])
+        score, br = pipeline.confidence_score(df, day)
+        # 한국은 0.9로만 세야 한다. 대리지표 행까지 평균에 넣으면 0.53으로 떨어진다.
+        self.assertAlmostEqual(score, (0.9 + 0.5 * 3) / 4)
+        self.assertEqual(br["품질"], "0.60")
