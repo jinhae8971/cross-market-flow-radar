@@ -29,6 +29,16 @@ def _safe(name: str, fn, *a, **kw):
         return [], {"collector": name, "ok": False, "error": str(exc)[:200]}
 
 
+def _last_session(store_path: str, source: str) -> dt.date | None:
+    """저장소에 남은 특정 source의 마지막 관측일. 대리지표 시작점을 정한다."""
+    try:
+        df = FlowStore(store_path).load()
+    except Exception:
+        return None
+    d = df[df["source"] == source]
+    return None if d.empty else pd.to_datetime(d["ts"]).max().date()
+
+
 def run(seed: bool = False, store_path: str = "data/flows.parquet",
         out_path: str = "docs/data.json") -> dict:
     health = []
@@ -39,17 +49,42 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         records += r
         health.append(h)
 
-    r, h = _safe("etf_aum", etf_flow.collect)
+    closes, ch = _safe("etf_closes", etf_flow.load_closes)
+    latest_session = (closes.index[-1].date()
+                      if hasattr(closes, "empty") and not closes.empty else None)
+    if not ch.get("ok"):
+        health.append(ch)
+
+    r, h = _safe("etf_aum", etf_flow.collect,
+                 closes=closes if latest_session else None)
     records += r
     if not r and os.path.exists(out_path):
         with open(out_path, encoding="utf-8") as previous_file:
             previous = json.load(previous_file)
         if previous.get("quality_warnings"):
-            h.update(ok=False, error="새 ETF 관측 전까지 이전 품질 경고 유지")
+            # 이전 경고를 유지하되 이번 회차의 실제 사유를 덮어쓰지 않는다.
+            # 덮어쓰면 근본 원인이 health에서 사라져 장애가 눈에 띄지 않는다
+            # (2026-09-08 동결이 7일간 발견되지 않은 직접적 원인).
+            h.update(ok=False, latched=True,
+                     error=h.get("error") or "새 ETF 관측 없음 — 이전 품질 경고 유지")
     if h.get("ok") and not r:
         # 0건은 실패가 아니다 — 아직 새 세션이 없다는 정상 상태다.
         h["error"] = "추가 관측 없음 또는 기준점 설정 — 신규 흐름 없음"
     health.append(h)
+
+    # 백본이 동결됐으면 대리지표로 계열을 이어간다. 멈춘 계열을 최신인 척
+    # 내보내는 것보다, 해상도가 낮다고 밝히고 최신 날짜를 유지하는 편이 안전하다.
+    degraded = False
+    if not r and latest_session:
+        last_real = _last_session(store_path, "etf_aum_delta")
+        if last_real is None or last_real < latest_session:
+            pr, ph = _safe("etf_proxy", etf_flow.proxy_collect, since=last_real)
+            if pr:
+                records += pr
+                degraded = True
+                ph.update(degraded=True,
+                          error="ETF AUM 동결 — 대리지표(OHLCV) 모드로 계열 유지")
+            health.append(ph)
 
     r, h = _safe("cot", cot.collect, 26)
     records += r
@@ -88,9 +123,18 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
     rot = rotation.matrix(sig)
 
     quality = [h.get("error", h["collector"]) for h in health if not h.get("ok")]
+    if degraded:
+        # 대리지표는 계열을 잇기 위한 것이지 발화 근거가 아니다.
+        quality.append("대리지표 모드 — 신규 신호·로테이션 판단 보류")
     if quality:
         kept = []
         rot = {"ready": False, "rows": [], "from": None, "to": None}
+
+    as_of = sig["ts"].max().date() if not sig.empty else None
+    # 신선도는 달력일이 아니라 '놓친 세션 수'로 잰다. 발송 게이트의 입력값이다.
+    stale_sessions = 0
+    if as_of and latest_session and hasattr(closes, "index"):
+        stale_sessions = sum(1 for d in closes.index if d.date() > as_of)
 
     recent = sig[sig["ts"] >= sig["ts"].max() - pd.Timedelta(days=120)]
     series = {
@@ -106,7 +150,10 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
         "dashboard_url": os.environ.get("DASHBOARD_URL", ""),
         "detail": detail.build(df, sig),
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "as_of": sig["ts"].max().date().isoformat() if not sig.empty else None,
+        "as_of": as_of.isoformat() if as_of else None,
+        "latest_session": latest_session.isoformat() if latest_session else None,
+        "stale_sessions": int(stale_sessions),
+        "mode": "degraded" if degraded else "normal",
         "markets": MARKET_KO,
         "alerts": kept,
         "suppressed": [a for a in alerts if "suppressed" in a],

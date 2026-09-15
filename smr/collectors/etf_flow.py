@@ -37,7 +37,34 @@ UNIVERSE: dict[str, tuple[str, ...]] = {
 
 AUM_CACHE = "data/aum_snapshots.json"
 
+# 공급원이 얼어붙었다고 판정하기까지 허용하는 '미갱신 세션' 수.
+# 1세션은 정상적인 공시 지연일 수 있다. 2세션 연속이면 지연이 아니라 고장이다.
+FROZEN_AFTER_SESSIONS = 2
+
 SYM_TO_MARKET: dict[str, str] = {s: m for m, t in UNIVERSE.items() for s in t}
+
+
+class SourceFrozen(RuntimeError):
+    """AUM 필드가 갱신을 멈춘 상태 — 일시적 결측과 구분되는 별도 장애 등급.
+
+    일시적 결측은 다음 회차에 저절로 복구되므로 기다리면 된다. 그러나 동결은
+    기다려도 복구되지 않는다. 두 경우를 같은 ValueError로 던지면 파이프라인은
+    영원히 '조금 더 기다리는' 선택을 하고, 그동안 as_of가 고정된 채
+    이전 관측치가 매일 새 브리프처럼 발송된다. 그래서 타입을 분리한다.
+    """
+
+    def __init__(self, last_good: str | None, sessions_behind: int) -> None:
+        self.last_good = last_good
+        self.sessions_behind = sessions_behind
+        super().__init__(
+            f"ETF AUM 소스 동결 — {last_good} 이후 {sessions_behind}세션째 값 미변동"
+            " (yfinance totalAssets 갱신 중단). 대리지표로 전환"
+        )
+
+
+def load_closes(period: str = "10d") -> pd.DataFrame:
+    """수집기와 파이프라인이 같은 세션 달력을 보도록 하는 공개 진입점."""
+    return _closes([s for t in UNIVERSE.values() for s in t], period=period)
 
 
 def _snapshot(tickers: Sequence[str]) -> dict[str, dict]:
@@ -72,6 +99,22 @@ def _closes(tickers: Sequence[str], period: str = "10d") -> pd.DataFrame:
     if isinstance(df, pd.Series):  # 단일 티커
         df = df.to_frame(name=list(tickers)[0])
     return df.dropna(how="all")
+
+
+def _sessions_between(closes: pd.DataFrame, start_iso: str | None,
+                      end: dt.date) -> int:
+    """start(제외) ~ end(포함) 사이의 실제 거래 세션 수.
+
+    달력일이 아니라 세션으로 세야 주말·휴장이 '동결'로 오인되지 않는다.
+    """
+    if not start_iso:
+        return 1
+    try:
+        start = dt.date.fromisoformat(start_iso)
+    except ValueError:
+        return 1
+    days = [d.date() for d in closes.index]
+    return sum(1 for d in days if start < d <= end) or 1
 
 
 def _load_cache(path: str) -> dict:
@@ -148,6 +191,17 @@ def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE,
             raise ValueError("ETF 이전 AUM 일부 결측 — 기준점 확인 필요")
         unchanged = [s for s in syms if snap[s]["aum"] == prev[s]["aum"]]
         if unchanged:
+            # 전 종목이 바이트 단위로 동일하다는 것은 '흐름이 없었다'가 아니라
+            # '필드가 갱신되지 않았다'는 뜻이다. 몇 세션째인지를 캐시에 누적해
+            # 일시 지연과 동결을 구분한다. 캐시의 기준점(session/latest)은
+            # 어느 쪽이든 절대 건드리지 않는다 — 소급 수집이 불가하므로
+            # 기준점을 잃으면 그 구간은 영구 결측이 된다.
+            behind = _sessions_between(closes, prev_session, session)
+            cache["unchanged_streak"] = behind
+            cache["unchanged_seen_at"] = session.isoformat()
+            _save_cache(cache_path, cache)
+            if len(unchanged) == len(syms) and behind >= FROZEN_AFTER_SESSIONS:
+                raise SourceFrozen(prev_session, behind)
             raise ValueError("AUM 갱신 미확인 — 계산 보류: " + ", ".join(unchanged))
         if prev_session != closes.index[-2].date().isoformat():
             # A multi-session delta cannot be assigned to one day's return.
@@ -191,8 +245,28 @@ def collect(as_of: dt.date | None = None, cache_path: str = AUM_CACHE,
                 )
             )
 
+    # 정상 수집 — 동결 카운터를 비운다(복구 시 자동으로 통상 모드 복귀).
     _save_cache(cache_path, {"session": session.isoformat(), "latest": snap,
-                             "prev_session": prev_session})
+                             "prev_session": prev_session,
+                             "unchanged_streak": 0, "unchanged_seen_at": None})
+    return records
+
+
+def proxy_collect(since: dt.date | None = None, period: str = "3mo",
+                  markets: Sequence[str] | None = None) -> list[FlowRecord]:
+    """AUM 소스 동결 구간을 OHLCV 기반 대리지표로 메운다.
+
+    AUM은 소급이 불가하지만 OHLCV는 항상 신선하다. 따라서 백본이 죽었을 때
+    계열을 '멈추는' 대신 '해상도를 낮춰 계속 돌린다'. 산출물은 backfill과
+    동일한 source/confidence를 쓰므로, 실측 AUM이 복구되면 신호 계층의
+    신뢰도 가중치가 자동으로 대리지표를 눌러준다.
+
+    since 이후 세션만 생성한다 — 실측이 있는 구간을 덮어 이중계상하지 않기 위해서다.
+    """
+    records = [r for r in backfill(period) if since is None or r.ts > since]
+    if markets:
+        allowed = set(markets)
+        records = [r for r in records if r.market in allowed]
     return records
 
 

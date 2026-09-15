@@ -327,7 +327,10 @@ class TestAumQuality(unittest.TestCase):
                 after = json.load(f)
             self.assertEqual(after['session'], '2026-09-08' if gap else before['session'])
             if not gap:
-                self.assertEqual(before, after)
+                # 불변식은 '파일이 한 글자도 안 바뀐다'가 아니라
+                # '기준점(session/latest)이 보존된다'이다. 동결 카운터 같은
+                # 진단용 메타데이터는 기록돼야 다음 회차가 판단할 수 있다.
+                self.assertEqual(after['latest'], before['latest'])
 
     def test_unchanged_aum_does_not_create_inverse_price_flow(self):
         self.check_collect(changed=False)
@@ -346,3 +349,94 @@ class TestAumQuality(unittest.TestCase):
         msg = notify.build_message(d)
         self.assertIn('판단 보류', msg)
         self.assertNotIn('유럽 → 미국', msg)
+
+
+class TestSourceFreeze(unittest.TestCase):
+    """AUM 소스 동결 감지 — 2026-09-08 장애의 회귀 테스트."""
+
+    def _run(self, sessions, cached_session):
+        from unittest.mock import patch
+        from smr.collectors import etf_flow
+        syms = [s for group in etf_flow.UNIVERSE.values() for s in group]
+        closes = pd.DataFrame({s: [100.0 + i for i in range(len(sessions))]
+                               for s in syms},
+                              index=pd.to_datetime(sessions))
+        snap = {s: {'aum': 1000.0} for s in syms}          # 전 종목 값 불변
+        cache = {'session': cached_session,
+                 'latest': {s: {'aum': 1000.0} for s in syms}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, 'aum.json')
+            with open(path, 'w') as f:
+                json.dump(cache, f)
+            with patch.object(etf_flow, '_snapshot', return_value=snap):
+                with self.assertRaises(Exception) as ctx:
+                    etf_flow.collect(cache_path=path, closes=closes)
+            with open(path) as f:
+                after = json.load(f)
+            return ctx.exception, after
+
+    def test_one_session_behind_is_transient_not_frozen(self):
+        from smr.collectors.etf_flow import SourceFrozen
+        exc, after = self._run(['2026-09-04', '2026-09-08'], '2026-09-04')
+        self.assertNotIsInstance(exc, SourceFrozen)
+        self.assertEqual(after['unchanged_streak'], 1)
+
+    def test_two_sessions_behind_escalates_to_frozen(self):
+        from smr.collectors.etf_flow import SourceFrozen
+        exc, after = self._run(
+            ['2026-09-04', '2026-09-08', '2026-09-09'], '2026-09-04')
+        self.assertIsInstance(exc, SourceFrozen)
+        self.assertEqual(exc.last_good, '2026-09-04')
+        self.assertEqual(after['session'], '2026-09-04')   # 기준점 보존
+
+    def test_proxy_collect_only_fills_after_last_real_session(self):
+        from unittest.mock import patch
+        from smr.collectors import etf_flow
+        from smr.schema import FlowRecord
+        made = [FlowRecord(ts=dt.date(2026, 9, d), market='US', actor='foreign',
+                           instrument='SPY', net_flow_usd=1.0, lag_days=0,
+                           confidence=0.5, source='etf_moneyflow_proxy')
+                for d in (7, 8, 9, 10)]
+        with patch.object(etf_flow, 'backfill', return_value=made):
+            out = etf_flow.proxy_collect(since=dt.date(2026, 9, 8))
+        self.assertEqual([r.ts.day for r in out], [9, 10])
+
+
+class TestFreshnessGate(unittest.TestCase):
+    """오래된 수치가 통상 브리프 형태로 발송되지 않아야 한다."""
+
+    def _payload(self, stale):
+        return {'as_of': '2026-09-08', 'latest_session': '2026-09-15',
+                'stale_sessions': stale, 'alerts': [], 'quality_warnings': ['x'],
+                'detail': {'US': {'latest': 3.27, 'cum': {'d20': 37.0},
+                                  'signal': {'z20': 0.12}}},
+                'health': [{'collector': 'etf_aum', 'ok': False,
+                            'error': 'ETF AUM 소스 동결'}],
+                'rotation': {'ready': False, 'rows': []}}
+
+    def test_stale_payload_withholds_numbers(self):
+        import notify
+        msg = notify.build_message(self._payload(5))
+        self.assertIn('발송 보류', msg)
+        self.assertIn('동결', msg)
+        self.assertNotIn('3.27', msg)
+        self.assertNotIn('시장별 순유입', msg)
+
+    def test_fresh_payload_keeps_normal_brief(self):
+        import notify
+        msg = notify.build_message(self._payload(1))
+        self.assertIn('시장별 순유입', msg)
+        self.assertNotIn('발송 보류', msg)
+
+
+class TestSourceDedup(unittest.TestCase):
+    def test_proxy_does_not_double_count_with_real(self):
+        from smr import signals
+        day = dt.date(2026, 9, 9)
+        df = to_frame([
+            rec(day, 'US', 100.0, conf=0.75, source='etf_aum_delta'),
+            rec(day, 'US', 900.0, conf=0.50, source='etf_moneyflow_proxy'),
+        ])
+        agg = signals.aggregate(df)
+        self.assertEqual(len(agg), 1)
+        self.assertAlmostEqual(agg['net_flow_usd'].iloc[0], 75.0)

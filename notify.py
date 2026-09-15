@@ -43,9 +43,48 @@ def dashboard_url(d: dict) -> str:
     return ""
 
 
+# 이 세션 수를 넘어 뒤처지면 숫자를 '참고값'으로도 내보내지 않는다.
+MAX_STALE_SESSIONS = 2
+
+
+def build_stale_message(d: dict) -> str:
+    """신선도 게이트에 걸렸을 때의 장애 통지.
+
+    통상 브리프와 형식을 일부러 다르게 간다. 같은 레이아웃에 '(참고값)'만
+    덧붙이면 수신자는 습관적으로 최신치로 읽는다. 실제로 7세션 묵은 수치가
+    매일 정상 브리프처럼 발송됐다. 숫자는 아예 싣지 않는다.
+    """
+    bad = [h for h in d.get("health", []) if not h.get("ok")]
+    lines = [
+        "<b>🛑 Cross-Market Flow Radar — 발송 보류</b>",
+        "",
+        f"최신 관측 <code>{d.get('as_of')}</code> · "
+        f"직전 세션 <code>{d.get('latest_session')}</code>",
+        f"<b>{d.get('stale_sessions')}세션 뒤처짐</b> — 브리프 수치는 게시하지 않습니다.",
+        "",
+        "<b>원인</b>",
+    ]
+    lines += [f"  · {h['collector']}: {h.get('error', '실패')}" for h in bad] or \
+             ["  · 사유 미기록 — Actions 로그 확인 필요"]
+    lines += ["", "AUM 스냅샷은 소급 수집이 불가하므로 해당 구간은 영구 결측입니다."]
+    url = dashboard_url(d)
+    if url:
+        lines += ["", f'📊 <a href="{url}">대시보드</a>']
+    return "\n".join(lines)
+
+
+def is_stale(d: dict) -> bool:
+    return int(d.get("stale_sessions") or 0) > MAX_STALE_SESSIONS
+
+
 def build_message(d: dict) -> str:
     """텔레그램은 결론만. 근거는 대시보드에서 본다."""
-    lines = [f"<b>🌐 Cross-Market Flow Radar</b>  <code>{d['as_of']}</code>", ""]
+    if is_stale(d):
+        return build_stale_message(d)
+
+    banner = " · 대리지표" if d.get("mode") == "degraded" else ""
+    lines = [f"<b>🌐 Cross-Market Flow Radar</b>  "
+             f"<code>{d['as_of']}</code>{banner}", ""]
 
     quality = d.get("quality_warnings", [])
     if quality:
@@ -75,7 +114,13 @@ def build_message(d: dict) -> str:
 
     # 시장별 한 줄 요약 — 상세는 대시보드로
     lines.append("")
-    lines.append("<b>시장별 순유입</b>" + (" (이전 관측 참고값)" if quality else ""))
+    if d.get("mode") == "degraded":
+        note = " (대리지표 · 해상도 낮음)"     # 날짜는 최신, 추정 방식만 다르다
+    elif quality:
+        note = " (이전 관측 참고값)"
+    else:
+        note = ""
+    lines.append("<b>시장별 순유입</b>" + note)
     for m in ("KR", "JP", "EU", "US"):
         det = d.get("detail", {}).get(m)
         if not det:
@@ -89,7 +134,9 @@ def build_message(d: dict) -> str:
     bad = [h for h in d.get("health", []) if not h["ok"]]
     if bad:
         lines.append("")
-        lines.append("⚠️ 수집 실패: " + ", ".join(h["collector"] for h in bad))
+        for h in bad:
+            # 수집기 이름만 적으면 원인을 보려고 매번 Actions 로그를 열어야 한다.
+            lines.append(f"⚠️ 수집 실패 · {h['collector']}: {h.get('error', '사유 미기록')}")
 
     if any(h.get("status") == "unavailable" for h in d.get("health", [])):
         lines.append("⚠️ KRX 원천 수급 미수집 — 한국은 ETF 대리지표")

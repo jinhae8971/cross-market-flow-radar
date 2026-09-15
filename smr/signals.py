@@ -20,6 +20,12 @@ def aggregate(df: pd.DataFrame, freq: str = "D") -> pd.DataFrame:
         return pd.DataFrame(columns=["ts", "market", "net_flow_usd"])
     d = df.copy()
     d["ts"] = pd.to_datetime(d["ts"])
+    # 같은 종목·같은 날을 두 소스가 덮으면(실측 AUM + 대리지표) 합산 시 이중계상된다.
+    # 저장소 키에는 source가 포함되므로 upsert가 걸러주지 못한다. 여기서
+    # 신뢰도가 높은 관측만 남긴다 — 실측이 복구되면 자동으로 대리지표를 대체한다.
+    d = (d.sort_values("confidence", ascending=False)
+           .drop_duplicates(subset=["ts", "market", "actor", "instrument"],
+                            keep="first"))
     d["weighted"] = d["net_flow_usd"] * d["confidence"]
     g = (
         d.groupby(["market", pd.Grouper(key="ts", freq=freq)])["weighted"]
