@@ -1,6 +1,6 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-23T13:47:01+00:00",
+ "generated_at": "2026-09-23T13:47:48+00:00",
  "as_of": "2026-09-22",
  "latest_session": "2026-09-22",
  "stale_sessions": 0,
@@ -1019,7 +1019,7 @@
    "actors": [
     {
      "name": "투기적 선물 포지션 변화(COT) · 4주",
-     "flow": -39.105
+     "flow": -39.104
     }
    ],
    "sources": [
