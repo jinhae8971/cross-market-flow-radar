@@ -1,17 +1,24 @@
 name: flow-radar-collect
 
+# v2 (2026-09-23) 운영 원칙
+#  · 발행사 공시(SSGA navhist)는 미국 세션 T의 값을 KST T+1 약 14:00에 올린다.
+#    그래서 주 실행은 15:17 KST, 지연 대비 재시도 16:47, 누락분 따라잡기 08:17.
+#    정각·30분은 GitHub 스케줄러 혼잡 슬롯이라 피한다(v1은 최대 5시간 20분 지연).
+#  · 관측 저장은 항상 한다(commit: always). 발행 보류는 정상 종료이며 텔레그램은
+#    상태 전환에만 반응한다. 워크플로우 자체 실패만 ops_alert.py가 알린다.
 on:
   schedule:
-    - cron: "0 22 * * 0-4"   # 평일 07:00 KST — 미국 마감 후 (전 시장 반영)
-    - cron: "30 7 * * 1-5"   # 평일 16:30 KST — 한국 마감 후 (KR 해상도 보강)
+    - cron: "17 6 * * 1-5"    # 평일 15:17 KST — 주 발송 슬롯
+    - cron: "47 7 * * 1-5"    # 평일 16:47 KST — 공시 지연 재시도
+    - cron: "17 23 * * 0-4"   # 평일 08:17 KST — 전일 누락분 따라잡기
   workflow_dispatch:
     inputs:
       seed:
-        description: "과거 1년 시딩 후 실행 (최초 1회만 true)"
+        description: "한국 원천 이력을 깊게(100영업일) 다시 받는다"
         required: false
         default: "false"
       force_notify:
-        description: "오늘 이미 발송했어도 텔레그램 브리프를 다시 보낸다"
+        description: "중복·야간 가드를 무시하고 현재 상태 메시지를 발송한다"
         required: false
         default: "false"
 
@@ -27,19 +34,7 @@ defaults:
     shell: bash
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-      - run: pip install -r requirements.txt
-      - run: python -m unittest discover -s tests -v
-
   collect:
-    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -49,6 +44,11 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: pip install -r requirements.txt
+
+      # 테스트를 같은 잡에 둔다 — 별도 잡이면 테스트 실패 시 수집 잡이 통째로
+      # 건너뛰어져 실패 알림도 커밋도 없이 조용히 멈춘다(의존성 업데이트 사고 대비).
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
 
       - name: Collect and build signals
         env:
@@ -69,7 +69,7 @@ jobs:
             python run.py
           fi
 
-      - name: Send Telegram brief
+      - name: Telegram (state transitions only)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -79,7 +79,17 @@ jobs:
           TZ: "Asia/Seoul"
         run: python notify.py
 
+      - name: Crash alert (2nd consecutive failure, 20h cooldown)
+        if: failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python ops_alert.py || true
+
+      # 실패한 실행이어도 저장된 관측·상태는 커밋한다 — v1의 흡수 상태 재발 방지.
       - name: Commit data
+        if: always()
         run: |
           set -euo pipefail
           git config user.name  "github-actions[bot]"
@@ -95,20 +105,3 @@ jobs:
             sleep $((i * 5))
           done
           echo "::error::3회 시도 후에도 푸시 실패"; exit 1
-
-      - name: Notify failure
-        if: failure()
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          REASON='Flow Radar 수집 실패 - AUM 스냅샷은 소급 불가하므로 즉시 재실행 필요'
-          if [[ -f docs/halt.json ]]; then
-            REASON=$(python3 -c "import json;h=json.load(open('docs/halt.json',encoding='utf-8'));b=' / '.join(f'{k} {v}' for k,v in h['breakdown'].items());print(f\"Flow Radar 중단 - 신뢰도 {h['confidence']} < 기준 {h['threshold']} ({b}). 산출물 미갱신 - 대시보드는 as_of {h['as_of']} 유지\")")
-          fi
-          curl -sS -X POST \
-            "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
-            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-            --data-urlencode "text=$(printf '%s\n%s' "${REASON}" "${RUN_URL}")" \
-            || true

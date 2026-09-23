@@ -65,6 +65,9 @@ def to_frame(records: Iterable[FlowRecord]) -> pd.DataFrame:
     return df.astype(SCHEMA)
 
 
+SCHEMA_SUBSET = {k: v for k, v in SCHEMA.items()}
+
+
 class FlowStore:
     """파티션 없는 단일 parquet. 중복은 (ts, market, actor, instrument, source)로 제거.
 
@@ -98,13 +101,29 @@ class FlowStore:
         merged = merged.sort_values(["_zero", "_ord"], ascending=[True, False])
         merged = merged.drop_duplicates(subset=self.KEY, keep="first")
         merged = merged.drop(columns=["_ord", "_zero"])
-        merged = merged.sort_values(["ts", "market", "actor"]).reset_index(drop=True)
+        merged = merged.sort_values(["ts", "market", "actor", "instrument", "source"]
+                                    ).reset_index(drop=True)
         added = len(merged) - len(base)
+        if added == 0 and self._same(base, merged):
+            return 0            # 재수집분이 전부 기존과 동일 — 파일을 건드리지 않는다
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         tmp = f"{self.path}.tmp"
         merged.to_parquet(tmp, index=False)
         os.replace(tmp, self.path)
         return added
+
+    @classmethod
+    def _same(cls, a: pd.DataFrame, b: pd.DataFrame) -> bool:
+        """행 순서와 무관하게 내용이 같은가. 같으면 쓰기를 생략해 빈 커밋을 막는다."""
+        if len(a) != len(b):
+            return False
+        cols = cls.KEY + ["net_flow_usd", "lag_days", "confidence"]
+        try:
+            x = a[cols].astype(SCHEMA_SUBSET).sort_values(cls.KEY).reset_index(drop=True)
+            y = b[cols].astype(SCHEMA_SUBSET).sort_values(cls.KEY).reset_index(drop=True)
+            return x.equals(y)
+        except (KeyError, ValueError, TypeError):
+            return False
 
     def replace(self, df: pd.DataFrame) -> None:
         """전체 교체. 복구 루틴 전용 — 일반 수집 경로에서는 쓰지 않는다."""

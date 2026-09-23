@@ -1,4 +1,6 @@
-pandas>=2.1
+# 상한을 둔다 — 스케줄 실행 중 메이저 업데이트가 조용히 테스트를 깨지 않도록.
+pandas>=2.1,<4
 pyarrow>=14
-yfinance>=0.2.40
-requests>=2.31
+yfinance>=0.2.40,<2
+requests>=2.31,<3
+openpyxl>=3.1,<4

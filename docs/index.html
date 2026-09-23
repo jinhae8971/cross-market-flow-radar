@@ -79,6 +79,11 @@
   th{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;
      letter-spacing:.1em;color:var(--muted);font-weight:500}
   .ok{color:var(--up);font-weight:600}.bad{color:var(--down);font-weight:600}
+  .banner{margin:0 0 18px;padding:12px 14px;font-size:13.5px;line-height:1.55;background:#fff;
+          border-left:4px solid var(--down)}
+  .banner.warming{border-left-color:var(--eu)}
+  .banner b{font-family:Archivo,sans-serif}
+  .miss{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
   footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);
          font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -92,6 +97,7 @@
     <h1>Cross-Market Flow Radar</h1>
     <div class="sub" id="stamp">불러오는 중…</div>
   </header>
+  <div id="banner"></div>
 
   <h2>상대 자금 배분 · 최근 5거래일 변화</h2>
   <div class="rot" id="rot"></div>
@@ -138,12 +144,20 @@ function gauge(label,val,thr,unit){
     <div class="bar" style="--thr:${100/1.6}%"><span style="width:${pct}%"></span></div>
   </div>`;
 }
+function covHTML(c){
+  if(!c) return '';
+  const obs=c.obs?Object.entries(c.obs).map(([k,v])=>`${k} ${v}`).join(' · '):'';
+  return `<h4 style="margin-top:14px">기준일 커버리지</h4>
+    <div class="kv"><i>상태</i><span>${{ok:'정상',warming:'워밍업',missing:'결손'}[c.state]||c.state}</span></div>
+    ${c.coverage!=null?`<div class="kv"><i>순자산 비중</i><span>${(c.coverage*100).toFixed(0)}%</span></div>`:''}
+    ${obs?`<div class="kv"><i>관측 수</i><span>${obs}</span></div>`:''}`;
+}
 function detailHTML(x){
   if(!x) return '<div class="kv"><i>상세 데이터 없음</i></div>';
   const s=x.signal;
   const rows=a=>a.map(r=>`<div class="kv"><i>${r.name}</i><span>${bn(r.flow)}</span></div>`).join('');
   return `<div class="dgrid">
-    <div class="dblk"><h4>누적 순유입</h4>
+    <div class="dblk"><h4>누적 순유입 · ${x.label||''}</h4>
       <div class="kv"><i>최근 세션</i><span>${bn(x.latest)}</span></div>
       <div class="kv"><i>5일</i><span>${bn(x.cum.d5)}</span></div>
       <div class="kv"><i>20일</i><span>${bn(x.cum.d20)}</span></div>
@@ -154,7 +168,8 @@ function detailHTML(x){
       ${gauge('지속성',Math.abs(s.run),s.thresholds.run,'일')}
       <div class="kv"><i>장기 z60</i><span>${s.z60??'–'}σ</span></div></div>
     <div class="dblk"><h4>기여 종목 · 5일</h4>${rows(x.contributors)}</div>
-    <div class="dblk"><h4>자금 주체 · 20일</h4>${rows(x.actors)}
+    <div class="dblk"><h4>맥락 지표 · 합산 제외</h4>${x.actors.length?rows(x.actors):'<div class="kv"><i>없음</i></div>'}
+      ${covHTML(x.coverage)}
       <h4 style="margin-top:14px">데이터 출처</h4>
       ${x.sources.map(r=>`<div class="kv"><i>${r.name}</i><span>${r.rows}건 · 신뢰 ${r.confidence}</span></div>`).join('')}</div>
   </div>`;
@@ -162,14 +177,24 @@ function detailHTML(x){
 
 fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
   const KO=d.markets;
-  if((d.quality_warnings||[]).length){
-    const warning=document.createElement("p");
-    warning.textContent="⚠️ 신규 판단 보류 · 아래 값은 이전 관측 참고값 · "+d.quality_warnings.join(" / ");
-    document.getElementById("stamp").after(warning);
-    d.rotation={ready:false,rows:[]}; d.alerts=[];
-  }
+  const st=d.status||{state:'ok'};
+  const cb=d.confidence_breakdown||{};
   document.getElementById('stamp').textContent =
-    `기준일 ${d.as_of} · 레코드 ${d.rows_total.toLocaleString()}건`;
+    `기준일 ${d.as_of} · 커버리지 ${cb['커버리지']||'–'} · 신뢰도 ${d.confidence}`;
+  if(st.state!=='ok'){
+    const b=document.getElementById('banner');
+    b.className='banner'+(st.state==='warming'?' warming':'');
+    b.innerHTML = st.state==='warming'
+      ? `<b>🔄 워밍업</b> — 발행사 공시 기반 v2로 전환 직후입니다. 흐름은 같은 펀드의 관측이 두 세션 쌓여야 계산되므로, `+
+        `아래는 준비된 시장만 표시합니다. 발화·로테이션 판단은 신뢰도 기준(${st.threshold})을 넘은 뒤 재개됩니다.`
+      : `<b>🛑 발행 보류</b> — ${st.reason||''}<br>마지막 정상 발행 기준일 ${st.last_ok_as_of||'없음'} · `+
+        `발화·로테이션 판단은 보류하고, 수집된 관측만 표시합니다.`;
+  }
+  if((d.quality_warnings||[]).length){
+    const w=document.createElement('p'); w.className='miss';
+    w.textContent='⚠️ 핵심 원천 수집 실패 · '+d.quality_warnings.join(' / ');
+    document.getElementById('banner').after(w);
+  }
 
   // 로테이션 띠
   const rot=document.getElementById('rot');
@@ -194,14 +219,18 @@ fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
   // 시장 레인
   const lanes=document.getElementById('lanes');
   ['KR','JP','EU','US'].forEach(m=>{
-    const s=d.series[m]||[]; const last=s[s.length-1]||{f:0,z:null};
+    const s=d.series[m]||[];
+    // 레인 수치도 기준일 값 — 한국은 마감이 빨라 최신 점이 기준일보다 앞설 수 있다
+    const last=s.find(p=>p.d===d.as_of)||s[s.length-1]||{f:0,z:null};
+    const cst=((d.coverage||{})[m]||{}).state;
+    const note=cst==='warming'?'워밍업':(cst&&cst!=='ok'?'기준일 미관측':'');
     const el=document.createElement('div');
     el.className='lane'; el.setAttribute('role','button');
     el.tabIndex=0; el.setAttribute('aria-expanded','false');
     el.innerHTML=`<div class="name"><i class="dot" style="background:${cv(m)}"></i>${KO[m]}
         <i class="chev">▶</i></div>
       <div style="color:${cv(m)}">${spark(s)}</div>
-      <div class="val">${bn(last.f)}<span class="z">z ${last.z??'–'}</span></div>`;
+      <div class="val">${s.length?bn(last.f):'–'}<span class="z">${note?`<span class="miss">${note}</span>`:`z ${last.z??'–'}`}</span></div>`;
     const det=document.createElement('div');
     det.className='detail'; det.style.color=cv(m);
     det.innerHTML=detailHTML(d.detail[m]);
@@ -239,7 +268,7 @@ fetch('data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
      <td>${h.records??'–'}</td><td style="color:var(--muted)">${h.error||''}</td></tr>`).join('');
 
   document.getElementById('foot').textContent =
-    `생성 ${d.generated_at} · 흐름은 USD 환산 순유입, 신뢰도 가중 · 투자 판단의 근거가 아닌 관측 도구입니다`;
+    `생성 ${d.generated_at} · 한국=KOSPI 외국인 순매수(다음 금융) · 일본·유럽·미국=발행사 공시 발행좌수×NAV 순설정(iShares·SSGA) · USD 환산(ECB) · 투자 판단의 근거가 아닌 관측 도구입니다`;
 }).catch(e=>{
   document.getElementById('stamp').textContent='data.json을 불러오지 못했습니다 — 워크플로우 실행 후 다시 열어 주세요';
 });

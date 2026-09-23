@@ -1,7 +1,15 @@
 """L0 수집 → L1 저장 → L2 신호 → L3 로테이션 → L4 배포 산출물.
 
-수집기 하나가 죽어도 나머지는 돈다(우아한 성능저하). 대신 어떤 수집기가
-죽었는지는 산출물의 health 필드에 남겨 대시보드에서 바로 보이게 한다.
+수집기 하나가 죽어도 나머지는 돈다(우아한 성능저하). 어떤 수집기가 죽었는지는
+산출물의 health 필드에 남겨 대시보드에서 바로 보이게 한다.
+
+v2 운영 원칙 (2026-09-23):
+  · 저장과 발행을 분리한다. v1은 신뢰도 미달이면 예외로 작업을 끊었고, 그 탓에
+    커밋 단계가 건너뛰어져 새 관측이 한 번도 저장되지 않았다. 원천이 살아나도
+    기준점이 갱신되지 않으니 스스로 복구할 길이 없는 흡수 상태였다(9/15~9/23
+    14회 연속 실패). 이제 관측은 항상 저장하고, 게이트는 '발행'만 막는다.
+  · 게이트 판정은 status 필드로 내보낸다: ok / warming(첫 관측 누적 중) / halted.
+    텔레그램은 이 상태의 '전환'에만 반응한다(notify.py).
 """
 from __future__ import annotations
 
@@ -14,191 +22,245 @@ import pandas as pd
 
 from . import detail, repair, rotation, signals
 from .calendar_mask import masked
-from .collectors import cot, etf_flow, korea, naver_kr
-from .schema import FlowStore, to_frame
+from .collectors import cot, issuer, korea, kr_investor
+from .schema import MARKETS, FlowStore, to_frame
 
 MARKET_KO = {"KR": "한국", "JP": "일본", "EU": "유럽", "US": "미국"}
+KST = dt.timezone(dt.timedelta(hours=9))
 
-# 이 점수 아래로 떨어지면 산출물을 갱신하지 않고 작업 자체를 중단한다.
 # repo variable이 비어 있으면 빈 문자열이 들어오므로 or로 받아낸다.
 MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE") or "0.60")
+# 이 세션 수를 넘어 뒤처지면 발행하지 않는다.
+MAX_STALE_SESSIONS = 2
+# 크로스마켓 비교가 성립하는 최소 시장 수. 한 시장 휴장·결손은 표기하고 발행한다.
+MIN_MARKETS = 3
+# 발행사 공시 도착 시각(KST). SSGA navhist Last-Modified ≈ T+1 13:56 KST.
+ISSUER_READY_HOUR_KST = 15
 
-
-class LowConfidence(RuntimeError):
-    """신뢰도 미달 — 산출물을 쓰지 않고 실행을 중단시킨다.
-
-    낮은 신뢰도의 값에 경고를 달아 내보내는 방식은 이미 한 번 실패했다.
-    경고는 며칠이면 배경이 되고 숫자는 그대로 읽힌다. 그래서 경고가 아니라
-    중단으로 처리한다 — data.json을 덮지 않으므로 대시보드는 마지막 정상
-    상태를 유지하고, 종료코드가 0이 아니므로 워크플로우가 실패 통지를 보낸다.
-    """
-
-    def __init__(self, score: float, breakdown: dict) -> None:
-        self.score = score
-        self.breakdown = breakdown
-        super().__init__(
-            f"신뢰도 {score:.2f} < 기준 {MIN_CONFIDENCE:.2f} — 산출물 갱신 중단: "
-            + ", ".join(f"{k} {v}" for k, v in breakdown.items()))
-
-
-def confidence_score(df, as_of):
-    """최신 관측일 기준 신뢰도 = 관측 품질 x 시장 커버리지.
-
-    곱하는 이유: 네 시장 중 하나만 고품질로 들어와도 평균 신뢰도는 높게
-    나온다. 크로스마켓 비교가 목적이므로 커버리지 결손은 품질 저하와 같은
-    무게로 다뤄야 한다.
-    """
-    if df.empty or as_of is None:
-        return 0.0, {"관측": "없음"}
-    d = df[(pd.to_datetime(df["ts"]).dt.date == as_of)
-           & (df["actor"].isin(signals.PRIMARY_ACTORS))]
-    d = signals.preferred(d)   # 집계와 같은 행 집합을 봐야 한다
-    if d.empty:
-        return 0.0, {"관측": "없음"}
-    # 시장별로 먼저 평균을 낸 뒤 시장 간 평균을 낸다. 행 단위 평균을 쓰면
-    # ETF를 6개 담는 유럽이 1개 계열인 한국보다 6배 무겁게 반영된다.
-    quality = float(d.groupby("market")["confidence"].mean().mean())
-    covered = sorted(set(d["market"]))
-    coverage = len(covered) / len(MARKET_KO)
-    missing = [MARKET_KO[m] for m in MARKET_KO if m not in covered]
-    return quality * coverage, {"품질": f"{quality:.2f}",
-                                "커버리지": f"{len(covered)}/{len(MARKET_KO)}",
-                                "결손": ",".join(missing) or "없음"}
+# v1 잔재: 기준일 없는 AUM 추정치·OHLCV 대리지표·폐기된 네이버 PC 페이지.
+# 대조 검증에서 잡음으로 판명됐거나 다음 금융으로 대체됐으므로 저장소에서 걷어낸다.
+LEGACY_SOURCES = ("etf_aum_delta", "etf_moneyflow_proxy", "naver_kr")
 
 
 def _safe(name: str, fn, *a, **kw):
     try:
         out = fn(*a, **kw)
         return out, {"collector": name, "ok": True, "records": len(out)}
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — 수집기 격리
         traceback.print_exc()
-        return [], {"collector": name, "ok": False, "error": str(exc)[:200]}
+        return [], {"collector": name, "ok": False,
+                    "error": f"{type(exc).__name__}: {str(exc)[:180]}"}
 
 
-def _sessions_of(store_path: str, source: str) -> set:
-    """이미 확보한 날짜 집합. 같은 날을 반복 조회하지 않기 위한 입력."""
-    try:
-        df = FlowStore(store_path).load()
-    except Exception:
-        return set()
-    d = df[df["source"] == source]
-    return set() if d.empty else set(pd.to_datetime(d["ts"]).dt.date)
+def _comparable_session(sig: pd.DataFrame, window: int = 10,
+                        min_markets: int = MIN_MARKETS) -> dt.date | None:
+    """시장을 나란히 비교할 수 있는 가장 최근 날짜.
 
-
-def _last_session(store_path: str, source: str) -> dt.date | None:
-    """저장소에 남은 특정 source의 마지막 관측일. 대리지표 시작점을 정한다."""
-    try:
-        df = FlowStore(store_path).load()
-    except Exception:
-        return None
-    d = df[df["source"] == source]
-    return None if d.empty else pd.to_datetime(d["ts"]).max().date()
-
-
-def _comparable_session(sig: pd.DataFrame, window: int = 10) -> dt.date | None:
-    """네 시장을 나란히 비교할 수 있는 가장 최근 날짜.
-
-    단순 최대 날짜를 쓰면 안 된다. 소스마다 공시 시점이 다르므로(한국 원천은
-    당일, 미국 ETF는 마감 후) 한 시장만 하루 앞서 들어오는 일이 흔하고,
-    그날을 기준일로 삼으면 크로스마켓 비교가 성립하지 않는다.
-    최근 window 세션 안에 전 시장이 모인 날이 없으면 최대 날짜를 돌려주고,
-    커버리지 결손은 신뢰도 게이트가 판단하게 둔다.
+    전 시장이 모인 날을 우선하되, 그보다 최근에 min_markets 이상 모인 날이 있으면
+    그날을 쓴다(한 시장 휴장·결손을 표기하고 발행하기 위해). 둘 다 없으면 창 안에서
+    가장 많은 시장이 모인 날 중 최신일.
     """
     if sig.empty:
         return None
-    per_day = sig.groupby("ts")["market"].nunique().sort_index(ascending=False)
-    for ts, n in per_day.head(window).items():
-        if n >= len(MARKET_KO):
-            return ts.date()
-    return per_day.index[0].date()
+    per_day = sig.groupby("ts")["market"].nunique().sort_index(ascending=False).head(window)
+    full = next((ts for ts, n in per_day.items() if n >= len(MARKETS)), None)
+    part = next((ts for ts, n in per_day.items() if n >= min_markets), None)
+    if part is not None and (full is None or part > full):
+        return part.date()
+    if full is not None:
+        return full.date()
+    best = per_day.max()
+    return next(ts for ts, n in per_day.items() if n == best).date()
+
+
+def expected_session(now: dt.datetime) -> dt.date:
+    """지금쯤 발행사 공시가 올라와 있어야 할 가장 최근 미국 세션(평일 근사)."""
+    now = now.astimezone(KST)
+    day = now.date() - dt.timedelta(days=1)
+    if now.hour < ISSUER_READY_HOUR_KST:
+        day -= dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= dt.timedelta(days=1)
+    return day
+
+
+def stale_sessions(as_of: dt.date | None, calendar: list[dt.date],
+                   now: dt.datetime) -> int:
+    """기준일 이후 놓친 세션 수 — 달력일이 아니라 세션으로 센다.
+
+    과거 구간은 발행사 이력(휴장일 반영)으로, 아직 이력에 없는 최근 구간은 평일로 센다.
+    원천이 통째로 멈춰도 '시계'로 뒤처짐을 잡아내기 위해서다 — 관측 날짜끼리만
+    비교하면 전부 같이 멈춘 날 뒤처짐이 0으로 보인다.
+    """
+    if as_of is None:
+        return 0
+    last_cal = calendar[-1] if calendar else as_of
+    n = sum(1 for d in calendar if d > as_of)
+    day, end = max(last_cal, as_of), expected_session(now)
+    while day < end:
+        day += dt.timedelta(days=1)
+        if day.weekday() < 5:
+            n += 1
+    return n
+
+
+def confidence_score(sig: pd.DataFrame, core: pd.DataFrame, as_of: dt.date | None):
+    """기준일 신뢰도 = 관측 품질 x 시장 커버리지.
+
+    곱하는 이유: 한 시장만 고품질이어도 평균은 높게 나온다. 크로스마켓 비교가
+    목적이므로 시장 결손은 품질 저하와 같은 무게로 다룬다. 시장 품질은 소스 신뢰도에
+    그날의 순자산 커버리지를 곱한 값이다.
+    """
+    if sig.empty or as_of is None:
+        return 0.0, {"관측": "없음"}, {}
+    day = pd.Timestamp(as_of)
+    rows = sig[sig["ts"] == day]
+    cov = {r.market: float(r.coverage) for r in rows.itertuples()}
+    if not cov:
+        return 0.0, {"관측": "없음"}, {}
+    c = core[pd.to_datetime(core["ts"]) == day]
+    conf = c.groupby("market")["confidence"].mean().to_dict()
+    per = {m: conf.get(m, 0.0) * min(cov[m], 1.0) for m in cov}
+    quality = sum(per.values()) / len(per)
+    missing = [MARKET_KO[m] for m in MARKETS if m not in cov]
+    score = quality * len(cov) / len(MARKETS)
+    return score, {"품질": f"{quality:.2f}", "커버리지": f"{len(cov)}/{len(MARKETS)}",
+                   "결손": ",".join(missing) or "없음"}, cov
+
+
+def _market_status(sig: pd.DataFrame, as_of, cov: dict, store: issuer.ObsStore) -> dict:
+    out = {}
+    for m in MARKETS:
+        g = sig[sig["market"] == m]
+        last = g["ts"].max().date().isoformat() if len(g) else None
+        if m in cov:
+            state = "ok"
+        elif m in issuer.UNIVERSE and not len(g) and any(
+                store.series(s) for s in issuer.UNIVERSE[m]):
+            state = "warming"      # 첫 관측은 확보, 직전 관측이 없어 아직 흐름을 못 낸다
+        else:
+            state = "missing"
+        entry = {"state": state, "last": last,
+                 "coverage": round(cov[m], 3) if m in cov else None}
+        if m in issuer.UNIVERSE:
+            entry["obs"] = {s: len(store.series(s)) for s in issuer.UNIVERSE[m]}
+        out[m] = entry
+    return out
+
+
+def _status(as_of, score, breakdown, stale, markets: dict, previous: dict) -> dict:
+    missing = [m for m, v in markets.items() if v["state"] != "ok"]
+    if as_of is None:
+        state, reason = "halted", "관측 없음"
+    elif stale > MAX_STALE_SESSIONS:
+        state, reason = "halted", f"기준일 {as_of} — 최신 세션 대비 {stale}세션 뒤처짐"
+    elif score < MIN_CONFIDENCE:
+        warming = missing and all(markets[m]["state"] == "warming" for m in missing)
+        state = "warming" if warming else "halted"
+        reason = (f"신뢰도 {score:.2f} < 기준 {MIN_CONFIDENCE:.2f} ("
+                  + " / ".join(f"{k} {v}" for k, v in breakdown.items()) + ")")
+    else:
+        state, reason = "ok", None
+    prev = previous.get("status") or {}
+    since = prev.get("since") if prev.get("state") == state else None
+    last_ok = (previous.get("as_of") if prev.get("state") == "ok"
+               else prev.get("last_ok_as_of"))
+    return {"state": state, "reason": reason,
+            "since": since or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+            "last_ok_as_of": as_of.isoformat() if state == "ok" and as_of else last_ok,
+            "threshold": MIN_CONFIDENCE}
+
+
+def _write_if_changed(path: str, payload: dict, previous: dict) -> bool:
+    """실행 시각성 필드 외에 바뀐 게 없으면 쓰지 않는다(빈 커밋 방지)."""
+    volatile = ("generated_at", "rows_added")
+
+    def norm(p: dict) -> str:
+        q = {k: v for k, v in p.items() if k not in volatile}
+        if isinstance(q.get("status"), dict):
+            q["status"] = {k: v for k, v in q["status"].items() if k != "since"}
+        return json.dumps(q, ensure_ascii=False, sort_keys=True, default=str)
+
+    if previous and norm(previous) == norm(payload):
+        return False
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    return True
 
 
 def run(seed: bool = False, store_path: str = "data/flows.parquet",
-        out_path: str = "docs/data.json") -> dict:
-    health = []
+        out_path: str = "docs/data.json", obs_path: str = issuer.OBS_PATH,
+        now: dt.datetime | None = None) -> dict:
+    now = (now or dt.datetime.now(dt.timezone.utc)).astimezone(KST)
+    health: list[dict] = []
     records = []
 
-    if seed:
-        r, h = _safe("etf_backfill", etf_flow.backfill, "1y")
+    # L0-a  발행사 공시 → 관측 저장소 → 흐름 재계산 (일본·유럽·미국 + EWY 맥락)
+    obs = issuer.ObsStore(obs_path)
+    r, hs = issuer.collect(obs, today=now.date())
+    records += r
+    health += hs
+    obs.save()
+
+    # L0-b  한국 핵심 계열. 저장 이력이 짧으면 깊게 받아 z60·CUSUM 창을 채운다.
+    store = FlowStore(store_path)
+    known = store.load()
+    kr_days = known[known["source"] == "daum_kr"]["ts"].nunique() if len(known) else 0
+    per_page = 100 if (seed or kr_days < 80) else 30
+    r, h = _safe("daum_kr", kr_investor.collect, per_page=per_page, now=now)
+    records += r
+    health.append(h)
+    if os.environ.get("KRX_API_KEY"):          # 키가 있을 때만 — 없으면 조용히 생략
+        kr_known = set(pd.to_datetime(known[known["source"] == "krx"]["ts"]).dt.date) \
+            if len(known) else set()
+        r, h = _safe("krx", korea.collect, known=kr_known)
         records += r
         health.append(h)
 
-    closes, ch = _safe("etf_closes", etf_flow.load_closes)
-    latest_session = (closes.index[-1].date()
-                      if hasattr(closes, "empty") and not closes.empty else None)
-    if not ch.get("ok"):
-        health.append(ch)
-
-    r, h = _safe("etf_aum", etf_flow.collect,
-                 closes=closes if latest_session else None)
-    records += r
-    if not r and os.path.exists(out_path):
-        with open(out_path, encoding="utf-8") as previous_file:
-            previous = json.load(previous_file)
-        if previous.get("quality_warnings"):
-            # 이전 경고를 유지하되 이번 회차의 실제 사유를 덮어쓰지 않는다.
-            # 덮어쓰면 근본 원인이 health에서 사라져 장애가 눈에 띄지 않는다
-            # (2026-09-08 동결이 7일간 발견되지 않은 직접적 원인).
-            h.update(ok=False, latched=True,
-                     error=h.get("error") or "새 ETF 관측 없음 — 이전 품질 경고 유지")
-    if h.get("ok") and not r:
-        # 0건은 실패가 아니다 — 아직 새 세션이 없다는 정상 상태다.
-        h["error"] = "추가 관측 없음 또는 기준점 설정 — 신규 흐름 없음"
-    health.append(h)
-
-    # 백본이 동결됐으면 대리지표로 계열을 이어간다. 멈춘 계열을 최신인 척
-    # 내보내는 것보다, 해상도가 낮다고 밝히고 최신 날짜를 유지하는 편이 안전하다.
-    degraded = False
-    if not r and latest_session:
-        last_real = _last_session(store_path, "etf_aum_delta")
-        if last_real is None or last_real < latest_session:
-            pr, ph = _safe("etf_proxy", etf_flow.proxy_collect, since=last_real)
-            if pr:
-                records += pr
-                degraded = True
-                ph.update(degraded=True,
-                          error="ETF AUM 동결 — 대리지표(OHLCV) 모드로 계열 유지")
-            health.append(ph)
-
+    # L0-c  맥락 지표 — 실패해도 게이트에 영향 없음
     r, h = _safe("cot", cot.collect, 26)
     records += r
     health.append(h)
 
-    known_kr = (_sessions_of(store_path, "krx")
-                | _sessions_of(store_path, "naver_kr"))
-    r, h = _safe("krx", korea.collect, known=known_kr)
-    records += r
-    if h.get("ok") and not r:
-        h.update(status="unavailable",
-                 error="KRX 신규 공시 없음 — 한국은 ETF 대리지표")
-    elif not h.get("ok") and "KRX_API_KEY" in h.get("error", ""):
-        # 미설정은 장애가 아니다. 실패로 세면 quality_warnings가 상시 채워져
-        # 알림·로테이션이 영구히 보류되고, 동시에 진짜 장애가 묻힌다.
-        h.update(ok=True, status="unconfigured", records=0)
-    health.append(h)
-
-    # KRX 원천이 없으면 키가 필요 없는 네이버 표로 같은 해상도를 확보한다.
-    if not r:
-        nr, nh = _safe("naver_kr", naver_kr.collect, known=known_kr)
-        records += nr
-        health.append(nh)
-
-    store = FlowStore(store_path)
+    # L1  저장 + 자가 복구
     added = store.upsert(to_frame(records))
     df = store.load()
-
-    # 자가 복구 — 과거 결함이 남긴 '전 종목 0' 날짜를 걷어낸다(멱등).
+    legacy = df["source"].isin(LEGACY_SOURCES)
+    if legacy.any():
+        health.append({"collector": "repair", "ok": True, "records": int(legacy.sum()),
+                       "error": "v1 잔재(기준일 없는 추정치·대리지표) 제거"})
+        df = df[~legacy].reset_index(drop=True)
+        store.replace(df)
     df, purged = repair.drop_dead_sessions(df)
     if purged:
         store.replace(df)
-        health.append({"collector": "repair", "ok": True,
-                       "records": len(purged),
-                       "error": f"미갱신 세션 제거: {', '.join(purged)}"})
 
-    sig = signals.build(df)
-    alerts = signals.alerts(sig)
+    # L2  핵심 계열 → 신호
+    universe, weights = issuer.UNIVERSE, issuer.weights(obs)
+    core = signals.core_rows(df, universe)
+    sig = signals.build(df, weights=weights, universe=universe)
+    as_of = _comparable_session(sig)
+    score, breakdown, cov = confidence_score(sig, core, as_of)
+    calendar = [d for d in obs.calendar() if d <= now.date()]
+    stale = stale_sessions(as_of, calendar, now)
+    markets = _market_status(sig, as_of, cov, obs)
 
-    # 캘린더 마스크 — 기계적 매매일의 알림은 사유를 달아 억제한다
+    previous = {}
+    if os.path.exists(out_path):
+        try:
+            with open(out_path, encoding="utf-8") as f:
+                previous = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            previous = {}
+    status = _status(as_of, score, breakdown, stale, markets, previous)
+
+    # L3  발화·로테이션 — 기준일에 관측된 시장만, 게이트 통과 시에만
+    alerts = signals.alerts(sig, as_of=as_of) if status["state"] == "ok" else []
     kept = []
     for a in alerts:
         flag, why = masked(dt.date.fromisoformat(a["ts"]))
@@ -206,77 +268,49 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
             a["suppressed"] = why
         else:
             kept.append(a)
+    rot = rotation.matrix(sig) if len(sig) else {"ready": False, "rows": []}
+    if rot.get("ready") and as_of and rot.get("as_of") != as_of.isoformat():
+        rot = {"ready": False, "rows": [],
+               "reason": f"4개 시장 동시 관측일({rot.get('as_of')})이 기준일과 다름"}
+    if status["state"] != "ok":
+        rot = {"ready": False, "rows": [], "reason": "발행 보류 중"}
 
-    rot = rotation.matrix(sig)
+    core_bad = [h for h in health
+                if not h.get("ok") and h["collector"] in ("ishares", "ssga", "daum_kr", "krx")]
+    quality = [f"{h['collector']}: {h.get('error', '실패')}" for h in core_bad]
 
-    quality = [h.get("error", h["collector"]) for h in health if not h.get("ok")]
-    if degraded:
-        # 대리지표는 계열을 잇기 위한 것이지 발화 근거가 아니다.
-        quality.append("대리지표 모드 — 신규 신호·로테이션 판단 보류")
-    if quality:
-        kept = []
-        rot = {"ready": False, "rows": [], "from": None, "to": None}
-
-    as_of = _comparable_session(sig)
-    # 신선도는 달력일이 아니라 '놓친 세션 수'로 잰다. 발송 게이트의 입력값이다.
-    stale_sessions = 0
-    if as_of and latest_session and hasattr(closes, "index"):
-        stale_sessions = sum(1 for d in closes.index if d.date() > as_of)
-
-    score, breakdown = confidence_score(df, as_of)
-    if score < MIN_CONFIDENCE:
-        # 중단 사유만 별도 파일로 남긴다. data.json은 손대지 않으므로
-        # 대시보드는 마지막 정상 상태를 그대로 보여준다.
-        halt = {"halted_at": dt.datetime.now(dt.timezone.utc).isoformat(
-                    timespec="seconds"),
-                "as_of": as_of.isoformat() if as_of else None,
-                "confidence": round(score, 3),
-                "threshold": MIN_CONFIDENCE,
-                "breakdown": breakdown,
-                "health": health}
-        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-        with open(os.path.join(os.path.dirname(out_path) or ".", "halt.json"),
-                  "w", encoding="utf-8") as f:
-            json.dump(halt, f, ensure_ascii=False, indent=1)
-        raise LowConfidence(score, breakdown)
-
-    recent = sig[sig["ts"] >= sig["ts"].max() - pd.Timedelta(days=120)]
+    recent = sig[sig["ts"] >= sig["ts"].max() - pd.Timedelta(days=120)] if len(sig) else sig
     series = {
-        m: [
-            {"d": r.ts.date().isoformat(), "f": round(r.net_flow_usd / 1e9, 3),
+        m: [{"d": r.ts.date().isoformat(), "f": round(r.net_flow_usd / 1e9, 3),
              "z": None if pd.isna(r.z20) else round(float(r.z20), 2)}
-            for r in g.itertuples()
-        ]
+            for r in g.itertuples()]
         for m, g in recent.groupby("market")
-    }
+    } if len(recent) else {}
 
     payload = {
         "dashboard_url": os.environ.get("DASHBOARD_URL", ""),
-        "detail": detail.build(df, sig),
         "generated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "as_of": as_of.isoformat() if as_of else None,
-        "latest_session": latest_session.isoformat() if latest_session else None,
-        "stale_sessions": int(stale_sessions),
+        "latest_session": calendar[-1].isoformat() if calendar else None,
+        "stale_sessions": int(stale),
         "confidence": round(score, 3),
         "confidence_breakdown": breakdown,
-        "mode": "degraded" if degraded else "normal",
+        "status": status,
+        "coverage": markets,
+        "mode": "normal",
+        "method": {"KR": "KOSPI 외국인 순매수 (다음 금융, 원 → USD·ECB)",
+                   "ETF": "발행사 공시 발행좌수 x NAV (iShares·SSGA)"},
+        "universe": {m: list(v) for m, v in universe.items()},
         "markets": MARKET_KO,
         "alerts": kept,
         "suppressed": [a for a in alerts if "suppressed" in a],
         "rotation": rot,
         "series": series,
+        "detail": detail.build(df, sig, universe, markets, as_of=as_of),
         "health": health,
         "quality_warnings": quality,
         "rows_total": int(len(df)),
         "rows_added": int(added),
     }
-
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    tmp = f"{out_path}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=1)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, out_path)
+    _write_if_changed(out_path, payload, previous)
     return payload
-

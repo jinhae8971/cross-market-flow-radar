@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""텔레그램 브리프. 알림이 없으면 하루 1회 스냅샷만 보낸다(중복 방지 상태 파일)."""
+"""텔레그램 브리프 — '세션당 1회' + '상태 전환 시에만' 알림.
+
+v1은 실패 통지를 실행마다(하루 2회) 보냈다. 같은 경고가 8일간 반복되면 경고는
+배경이 된다. v2는 상태 기계로 바꾼다:
+  ok       새 기준일이 생겼을 때만 브리프 1회. 직전이 보류였다면 '재개'를 붙인다.
+  halted   보류로 '전환'될 때 1회, 이후 7일마다 재알림. 복구되면 브리프로 알린다.
+  warming  첫 관측 누적 중 — 전환 시 1회만 안내.
+공통: KST 22:00~07:00에는 보내지 않는다(다음 실행으로 이월). 수동 강제 발송은 예외.
+"""
 from __future__ import annotations
 
 import datetime as dt
@@ -10,6 +18,10 @@ import requests
 
 STATE = "data/notify_state.json"
 KO = {"KR": "한국", "JP": "일본", "EU": "유럽", "US": "미국"}
+KST = dt.timezone(dt.timedelta(hours=9))
+NIGHT = (22, 7)                 # [22시, 7시) 발송 금지
+REMIND_DAYS = 7
+PARTIAL_HOLD = (12, 16)         # 공시 도착 대기창 — 이 시간대에는 결손 브리프를 미룬다
 
 
 def load_config() -> dict:
@@ -43,53 +55,37 @@ def dashboard_url(d: dict) -> str:
     return ""
 
 
-# 이 세션 수를 넘어 뒤처지면 숫자를 '참고값'으로도 내보내지 않는다.
-MAX_STALE_SESSIONS = 2
-
-
-def build_stale_message(d: dict) -> str:
-    """신선도 게이트에 걸렸을 때의 장애 통지.
-
-    통상 브리프와 형식을 일부러 다르게 간다. 같은 레이아웃에 '(참고값)'만
-    덧붙이면 수신자는 습관적으로 최신치로 읽는다. 실제로 7세션 묵은 수치가
-    매일 정상 브리프처럼 발송됐다. 숫자는 아예 싣지 않는다.
-    """
-    bad = [h for h in d.get("health", []) if not h.get("ok")]
-    lines = [
-        "<b>🛑 Cross-Market Flow Radar — 발송 보류</b>",
-        "",
-        f"최신 관측 <code>{d.get('as_of')}</code> · "
-        f"직전 세션 <code>{d.get('latest_session')}</code>",
-        f"<b>{d.get('stale_sessions')}세션 뒤처짐</b> — 브리프 수치는 게시하지 않습니다.",
-        "",
-        "<b>원인</b>",
-    ]
-    lines += [f"  · {h['collector']}: {h.get('error', '실패')}" for h in bad] or \
-             ["  · 사유 미기록 — Actions 로그 확인 필요"]
-    lines += ["", "AUM 스냅샷은 소급 수집이 불가하므로 해당 구간은 영구 결측입니다."]
+def _link(d: dict) -> list[str]:
     url = dashboard_url(d)
-    if url:
-        lines += ["", f'📊 <a href="{url}">대시보드</a>']
-    return "\n".join(lines)
+    return ["", f'📊 <a href="{url}">대시보드에서 상세 보기</a>'] if url else []
 
 
-def is_stale(d: dict) -> bool:
-    return int(d.get("stale_sessions") or 0) > MAX_STALE_SESSIONS
+def _market_lines(d: dict) -> list[str]:
+    lines = []
+    cov = d.get("coverage", {})
+    for m in ("KR", "JP", "EU", "US"):
+        det = (d.get("detail") or {}).get(m)
+        st = (cov.get(m) or {}).get("state")
+        if st == "warming":
+            lines.append(f"  {KO[m]} — 첫 관측 확보, 다음 세션부터 산출")
+            continue
+        if not det or (d.get("as_of") and det.get("ts") != d.get("as_of")):
+            lines.append(f"  {KO[m]} — 기준일 미관측 (휴장 또는 원천 미갱신)")
+            continue
+        z = det["signal"]["z20"]
+        ztxt = f"z {z}" if z is not None else f"z 누적 {det.get('observations', 0)}/8"
+        lines.append(f"  {KO[m]} ${det['latest']:+.2f}B "
+                     f"(20일 ${det['cum']['d20']:+.2f}B · {ztxt})")
+    return lines
 
 
-def build_message(d: dict) -> str:
-    """텔레그램은 결론만. 근거는 대시보드에서 본다."""
-    if is_stale(d):
-        return build_stale_message(d)
+def build_message(d: dict, recovered: bool = False) -> str:
+    """정상 브리프. 텔레그램은 결론만, 근거는 대시보드에서 본다."""
+    lines = [f"<b>🌐 Cross-Market Flow Radar</b>  <code>{d['as_of']}</code>", ""]
+    if recovered:
+        lines += ["✅ 발행 재개 — 발행사 공시 기반 v2 원천으로 복구", ""]
 
-    banner = " · 대리지표" if d.get("mode") == "degraded" else ""
-    lines = [f"<b>🌐 Cross-Market Flow Radar</b>  "
-             f"<code>{d['as_of']}</code>{banner}", ""]
-
-    quality = d.get("quality_warnings", [])
-    if quality:
-        lines.append("⚠️ 데이터 품질 확인 필요 — 신규 신호·로테이션 판단 보류")
-    rot = {} if quality else d.get("rotation", {})
+    rot = d.get("rotation", {})
     if rot.get("ready"):
         src, dst = rot.get("from"), rot.get("to")
         lines.append(f"<b>로테이션</b> {KO[src]} → {KO[dst]}" if src and dst
@@ -99,99 +95,154 @@ def build_message(d: dict) -> str:
             lines.append(f"  {KO[r['market']]} {r['share']:>5.1f}% {arrow}{abs(r['delta'])}")
         lines.append("")
 
-    if d["alerts"] and not quality:
+    if d.get("alerts"):
         lines.append("<b>발화 신호</b>")
         for a in d["alerts"]:
             lines.append(
                 f"  {'🟢' if a['flow_usd'] > 0 else '🔴'} {KO[a['market']]} {a['direction']} "
-                f"${a['flow_usd']/1e9:+.2f}B · z {a['z20']:.2f} · {'+'.join(a['triggers'])}"
-            )
+                f"${a['flow_usd']/1e9:+.2f}B · z {a['z20']:.2f} · {'+'.join(a['triggers'])}")
     else:
-        lines.append("신호 판단 보류" if quality else "발화 조건을 충족한 시장 없음")
-
+        lines.append("발화 조건을 충족한 시장 없음")
     for s in d.get("suppressed", []):
         lines.append(f"  ⚪ {KO[s['market']]} — {s['suppressed']}로 억제")
 
-    # 시장별 한 줄 요약 — 상세는 대시보드로
-    lines.append("")
-    if d.get("mode") == "degraded":
-        note = " (대리지표 · 해상도 낮음)"     # 날짜는 최신, 추정 방식만 다르다
-    elif quality:
-        note = " (이전 관측 참고값)"
-    else:
-        note = ""
-    lines.append("<b>시장별 순유입</b>" + note)
-    for m in ("KR", "JP", "EU", "US"):
-        det = d.get("detail", {}).get(m)
-        if not det:
-            continue
-        z = det["signal"]["z20"]
-        lines.append(
-            f"  {KO[m]} ${det['latest']:+.2f}B "
-            f"(20일 ${det['cum']['d20']:+.2f}B · z {z if z is not None else '–'})"
-        )
+    lines += ["", "<b>시장별 순유입</b> (한국=외국인 순매수 · 일·유·미=ETF 순설정)"]
+    lines += _market_lines(d)
 
-    bad = [h for h in d.get("health", []) if not h["ok"]]
+    for q in d.get("quality_warnings", []):
+        lines.append(f"⚠️ 수집 실패 · {q}")
+    return "\n".join(lines + _link(d))
+
+
+def build_halt_message(d: dict, reminder: bool = False) -> str:
+    st = d.get("status", {})
+    head = "⏰ 발행 보류 지속" if reminder else "🛑 발행 보류"
+    lines = [f"<b>{head} — Cross-Market Flow Radar</b>", "",
+             f"사유: {st.get('reason') or '미기록'}",
+             f"기준일 <code>{d.get('as_of')}</code> · 마지막 정상 발행 "
+             f"<code>{st.get('last_ok_as_of') or '없음'}</code>"]
+    bad = [h for h in d.get("health", []) if not h.get("ok")]
     if bad:
-        lines.append("")
-        for h in bad:
-            # 수집기 이름만 적으면 원인을 보려고 매번 Actions 로그를 열어야 한다.
-            lines.append(f"⚠️ 수집 실패 · {h['collector']}: {h.get('error', '사유 미기록')}")
+        lines += ["", "<b>원인 후보</b>"]
+        lines += [f"  · {h['collector']}: {h.get('error', '실패')}" for h in bad]
+    lines += ["", f"복구되면 브리프로 바로 알려드리고, 미복구 시 {REMIND_DAYS}일 뒤 다시 알립니다."]
+    return "\n".join(lines + _link(d))
 
-    status = {h.get("collector"): h.get("status") for h in d.get("health", [])}
-    if status.get("krx") == "unconfigured":
-        # 조치 가능한 상태는 조치 방법까지 적는다. '미수집'만 적으면
-        # 매일 같은 줄을 보면서도 무엇을 해야 할지 알 수 없다.
-        lines.append("⚠️ KRX 인증키 미등록 — 한국은 ETF 대리지표 "
-                     "(openapi.krx.co.kr 발급 후 KRX_API_KEY secret 등록)")
-    elif status.get("krx") == "unavailable":
-        lines.append("⚠️ KRX 신규 공시 없음 — 한국은 ETF 대리지표")
 
-    url = dashboard_url(d)
-    if url:
-        lines.append("")
-        lines.append(f'📊 <a href="{url}">대시보드에서 상세 보기</a>')
-        lines.append("<i>시장을 누르면 기여 종목 · 주체 · 신호값이 펼쳐집니다</i>")
-    return "\n".join(lines)
+def build_warming_message(d: dict) -> str:
+    lines = ["<b>🔄 Cross-Market Flow Radar — v2 전환 · 워밍업</b>", "",
+             "ETF 백본을 날짜가 찍힌 발행사 공시(발행좌수 x NAV)로 교체했습니다.",
+             "한국은 KOSPI 외국인 순매수(다음 금융)로 전환했습니다.", "",
+             f"<b>시장별 준비 상태</b> (기준일 <code>{d.get('as_of')}</code>)"]
+    lines += _market_lines(d)
+    warm = [KO[m] for m, v in (d.get("coverage") or {}).items() if v.get("state") == "warming"]
+    tail = (f"{'·'.join(warm)}은(는) 발행사 공시가 한 세션 더 쌓이면 흐름이 계산됩니다. "
+            if warm else "")
+    lines += ["", tail + "신뢰도 기준을 넘는 첫 기준일에 정상 브리프가 자동으로 재개됩니다."]
+    return "\n".join(lines + _link(d))
+
+
+def _load_state() -> dict:
+    if not os.path.exists(STATE):
+        return {}
+    try:
+        with open(STATE, encoding="utf-8") as f:
+            s = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    if "last_status" not in s and "last_sent" in s:
+        # v1 상태 파일({"last_sent": 날짜}) — v1은 2026-09-15부터 보류 상태였다.
+        s = {"last_status": "halted", "last_sent_as_of": None,
+             "last_status_notice": s.get("last_sent")}
+    return s
+
+
+def _save_state(s: dict) -> None:
+    os.makedirs(os.path.dirname(STATE) or ".", exist_ok=True)
+    with open(STATE, "w", encoding="utf-8") as f:
+        json.dump(s, f, ensure_ascii=False, sort_keys=True)
+
+
+def is_night(now: dt.datetime) -> bool:
+    h = now.astimezone(KST).hour
+    return h >= NIGHT[0] or h < NIGHT[1]
+
+
+def decide(d: dict, state: dict, now: dt.datetime, force: bool = False):
+    """(보낼 메시지 or None, 갱신될 상태, 사유). 부작용 없음 — 테스트 대상."""
+    st = (d.get("status") or {}).get("state", "ok")
+    prev = state.get("last_status")
+    new = dict(state)
+    today = now.astimezone(KST).date().isoformat()
+
+    if is_night(now) and not force:
+        return None, state, "야간(22~07시) — 다음 실행으로 이월"
+
+    if st == "ok":
+        fresh = d.get("as_of") and d.get("as_of") != state.get("last_sent_as_of")
+        if not (fresh or force):
+            return None, state, "이 기준일 브리프는 이미 발송"
+        full = sum(1 for v in (d.get("coverage") or {}).values() if v.get("state") == "ok")
+        hour = now.astimezone(KST).hour
+        if full < 4 and PARTIAL_HOLD[0] <= hour < PARTIAL_HOLD[1] and not force:
+            return None, state, "결손 시장 공시 도착 대기 — 다음 실행에서 재판정"
+        msg = build_message(d, recovered=prev in ("halted", "warming"))
+        new.update(last_status="ok", last_sent_as_of=d.get("as_of"))
+        return msg, new, "브리프"
+
+    if st == "halted":
+        last = state.get("last_status_notice")
+        overdue = (not last) or (dt.date.fromisoformat(today)
+                                 - dt.date.fromisoformat(last[:10])).days >= REMIND_DAYS
+        if prev != "halted" or overdue or force:
+            msg = build_halt_message(d, reminder=(prev == "halted" and not force))
+            new.update(last_status="halted", last_status_notice=today)
+            return msg, new, "보류 통지"
+        return None, state, "보류 지속 — 재알림 주기 전"
+
+    # warming
+    if prev != "warming" or force:
+        new.update(last_status="warming", last_status_notice=today)
+        return build_warming_message(d), new, "워밍업 안내"
+    return None, state, "워밍업 지속 — 안내 완료"
+
+
+def send(text: str, cfg: dict) -> int | None:
+    r = requests.post(
+        f"https://api.telegram.org/bot{cfg['telegram_token']}/sendMessage",
+        json={"chat_id": cfg["telegram_chat_id"], "text": text,
+              "parse_mode": "HTML", "disable_web_page_preview": True},
+        timeout=20,
+    )
+    r.raise_for_status()
+    try:
+        return (r.json().get("result") or {}).get("message_id")
+    except ValueError:
+        return None
 
 
 def main() -> None:
     with open("docs/data.json", encoding="utf-8") as f:
         d = json.load(f)
-
-    today = dt.date.today().isoformat()
-    state = {}
-    if os.path.exists(STATE):
-        try:
-            with open(STATE, encoding="utf-8") as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
     force = os.environ.get("NOTIFY_FORCE", "").lower() == "true"
-    if state.get("last_sent") == today and not d["alerts"] and not force:
-        print("[notify] 오늘 스냅샷 이미 발송 - 생략 "
-              "(재발송하려면 workflow_dispatch의 force_notify=true)")
+    now = dt.datetime.now(dt.timezone.utc)
+    state = _load_state()
+    msg, new_state, why = decide(d, state, now, force=force)
+    if msg is None:
+        print(f"[notify] 발송 생략 — {why}")
+        if new_state != state:
+            _save_state(new_state)
         return
 
     cfg = load_config()
     if not cfg["telegram_token"] or not cfg["telegram_chat_id"]:
         print("[telegram] 자격증명 없음 - 발송 생략")
-        print(build_message(d))
+        print(msg)
         return
-
-    r = requests.post(
-        f"https://api.telegram.org/bot{cfg['telegram_token']}/sendMessage",
-        json={"chat_id": cfg["telegram_chat_id"], "text": build_message(d),
-              "parse_mode": "HTML", "disable_web_page_preview": True},
-        timeout=20,
-    )
-    r.raise_for_status()
-
-    os.makedirs("data", exist_ok=True)
-    with open(STATE, "w", encoding="utf-8") as f:
-        json.dump({"last_sent": today}, f)
+    mid = send(msg, cfg)
+    print(f"[telegram] 발송 완료 ({why}, message_id={mid})")
+    _save_state(new_state)
 
 
 if __name__ == "__main__":
     main()
-

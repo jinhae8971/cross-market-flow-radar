@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""엔트리포인트.  python run.py [--seed]"""
+"""엔트리포인트.  python run.py [--seed]
+
+발행 보류는 정상 종료(0)다 — 관측은 저장됐고, 보류 여부는 status로 전달된다.
+비정상 종료는 코드·환경 장애일 때뿐이며, 그때만 ops_alert.py가 동작한다.
+"""
 import sys
 
-from smr.pipeline import LowConfidence, run
+import ops_alert
+from smr.pipeline import run
 
 if __name__ == "__main__":
-    seed = "--seed" in sys.argv
-    try:
-        p = run(seed=seed)
-    except LowConfidence as exc:
-        # 비정상 종료로 끝내야 워크플로우가 실패 통지를 보내고,
-        # 이어지는 텔레그램 브리프 단계가 건너뛰어진다.
-        print(f"HALT: {exc}", file=sys.stderr)
-        sys.exit(2)
-    print(f"as_of={p['as_of']}  rows={p['rows_total']} (+{p['rows_added']})  "
-          f"confidence={p['confidence']} {p['confidence_breakdown']}")
+    p = run(seed="--seed" in sys.argv)
+    st = p["status"]
+    print(f"as_of={p['as_of']}  status={st['state']}  rows={p['rows_total']} "
+          f"(+{p['rows_added']})  confidence={p['confidence']} {p['confidence_breakdown']}")
+    if st.get("reason"):
+        print(f"  reason: {st['reason']}")
+    for m, v in p["coverage"].items():
+        print(f"  {m}: {v}")
     for h in p["health"]:
         print("  ", h)
     for a in p["alerts"]:
         print(f"  ALERT {a['market']} {a['direction']} z={a['z20']:.2f} {a['triggers']}")
+    ops_alert.reset_on_success()
