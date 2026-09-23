@@ -1,6 +1,6 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-23T13:42:16+00:00",
+ "generated_at": "2026-09-23T13:47:01+00:00",
  "as_of": "2026-09-22",
  "latest_session": "2026-09-22",
  "stale_sessions": 0,
@@ -1019,7 +1019,7 @@
    "actors": [
     {
      "name": "투기적 선물 포지션 변화(COT) · 4주",
-     "flow": -39.14
+     "flow": -39.105
     }
    ],
    "sources": [
@@ -1057,21 +1057,15 @@
   {
    "collector": "daum_kr",
    "ok": true,
-   "records": 400
+   "records": 120
   },
   {
    "collector": "cot",
    "ok": true,
    "records": 78
-  },
-  {
-   "collector": "repair",
-   "ok": true,
-   "records": 4150,
-   "error": "v1 잔재(기준일 없는 추정치·대리지표) 제거"
   }
  ],
  "quality_warnings": [],
  "rows_total": 1624,
- "rows_added": 1531
+ "rows_added": 0
 }
