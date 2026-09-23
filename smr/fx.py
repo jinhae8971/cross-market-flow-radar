@@ -24,6 +24,13 @@ MAX_LOOKBACK_DAYS = 7
 
 # 통화 → 정렬된 [(날짜, USD 1달러당 통화 수량)]
 _CACHE: dict[str, list[tuple[dt.date, float]]] = {}
+# 실제로 조회를 마친 구간. 캐시에 '가까운 과거 값'이 있다는 이유로 조회를 건너뛰면
+# 조회 순서에 따라 같은 날짜가 다른 환율로 환산된다(재실행 때마다 값이 바뀐다).
+_COVERED: list[tuple[dt.date, dt.date]] = []
+
+
+def _covered(day: dt.date) -> bool:
+    return any(a <= day <= b for a, b in _COVERED)
 
 
 def _merge(ccy: str, pairs: list[tuple[dt.date, float]]) -> None:
@@ -47,6 +54,7 @@ def prefetch(start: dt.date, end: dt.date) -> bool:
     for ccy in CURRENCIES:
         _merge(ccy, [(dt.date.fromisoformat(d), float(v[ccy]))
                      for d, v in rates.items() if ccy in v])
+    _COVERED.append((start, end))
     return True
 
 
@@ -76,9 +84,9 @@ def per_usd(ccy: str, day: dt.date) -> float:
         return 1.0
     if ccy not in PAIR:
         raise KeyError(f"환율 미지원 통화: {ccy}")
-    rate = _lookup(ccy, day)
-    if rate is None and prefetch(day, day):
-        rate = _lookup(ccy, day)
+    if not _covered(day):
+        prefetch(day, day)
+    rate = _lookup(ccy, day) if _covered(day) else None
     if rate is None:
         rate = _yahoo(ccy, day)
         _merge(ccy, [(day, rate)])

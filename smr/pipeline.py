@@ -53,12 +53,17 @@ def _safe(name: str, fn, *a, **kw):
 
 
 def _comparable_session(sig: pd.DataFrame, window: int = 10,
-                        min_markets: int = MIN_MARKETS) -> dt.date | None:
+                        min_markets: int = MIN_MARKETS,
+                        cap: dt.date | None = None) -> dt.date | None:
     """시장을 나란히 비교할 수 있는 가장 최근 날짜.
 
     전 시장이 모인 날을 우선하되, 그보다 최근에 min_markets 이상 모인 날이 있으면
-    그날을 쓴다(한 시장 휴장·결손을 표기하고 발행하기 위해). 둘 다 없으면 창 안에서
-    가장 많은 시장이 모인 날 중 최신일.
+    그날을 쓴다(한 시장 휴장·결손을 표기하고 발행하기 위해).
+
+    둘 다 없으면(워밍업·광범위 장애) 창 안에서 가장 많은 시장이 모인 날 중 최신일을
+    쓰되, 공시 일정상 아직 완결될 수 없는 날(cap 이후)은 후보에서 뺀다. 그러지 않으면
+    한국처럼 마감이 빠른 시장만 들어온 날이 기준일이 되고, 공시 전인 시장이 '결손'으로
+    잡혀 멀쩡한 원천에 보류 알림이 나간다(2026-09-23 리허설에서 발견).
     """
     if sig.empty:
         return None
@@ -69,8 +74,11 @@ def _comparable_session(sig: pd.DataFrame, window: int = 10,
         return part.date()
     if full is not None:
         return full.date()
-    best = per_day.max()
-    return next(ts for ts, n in per_day.items() if n == best).date()
+    pool = per_day[per_day.index <= pd.Timestamp(cap)] if cap is not None else per_day
+    if pool.empty:
+        pool = per_day
+    best = pool.max()
+    return next(ts for ts, n in pool.items() if n == best).date()
 
 
 def expected_session(now: dt.datetime) -> dt.date:
@@ -133,9 +141,12 @@ def _market_status(sig: pd.DataFrame, as_of, cov: dict, store: issuer.ObsStore) 
     for m in MARKETS:
         g = sig[sig["market"] == m]
         last = g["ts"].max().date().isoformat() if len(g) else None
+        # 기준일 이전에 계열이 한 번도 없었던 시장 = 아직 출발 전. 첫 흐름이 기준일보다
+        # 늦게 생긴 경우도 여기에 든다(기준일 시점에는 여전히 누적 중).
+        started = bool(as_of) and bool((g["ts"] <= pd.Timestamp(as_of)).any())
         if m in cov:
             state = "ok"
-        elif m in issuer.UNIVERSE and not len(g) and any(
+        elif m in issuer.UNIVERSE and not started and any(
                 store.series(s) for s in issuer.UNIVERSE[m]):
             state = "warming"      # 첫 관측은 확보, 직전 관측이 없어 아직 흐름을 못 낸다
         else:
@@ -244,7 +255,7 @@ def run(seed: bool = False, store_path: str = "data/flows.parquet",
     universe, weights = issuer.UNIVERSE, issuer.weights(obs)
     core = signals.core_rows(df, universe)
     sig = signals.build(df, weights=weights, universe=universe)
-    as_of = _comparable_session(sig)
+    as_of = _comparable_session(sig, cap=expected_session(now))
     score, breakdown, cov = confidence_score(sig, core, as_of)
     calendar = [d for d in obs.calendar() if d <= now.date()]
     stale = stale_sessions(as_of, calendar, now)

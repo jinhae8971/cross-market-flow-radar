@@ -11,13 +11,12 @@ from __future__ import annotations
 
 import datetime as dt
 
-from functools import lru_cache
 
 import requests
 import yfinance as yf
 
 from ..schema import FlowRecord
-from ..fx import to_usd
+from ..fx import prefetch, to_usd
 
 ENDPOINT = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"
 
@@ -50,15 +49,25 @@ def _net(row: dict) -> float:
     return long_ - short
 
 
-@lru_cache(maxsize=8)
-def _spot(symbol: str) -> float:
-    hist = yf.Ticker(symbol).history(period="5d")
+def _closes(symbol: str, start: dt.date, end: dt.date):
+    """보고일 구간의 종가 이력. 과거 종가는 바뀌지 않으므로 재실행해도 값이 같다.
+
+    v1은 '최근 종가' 하나로 모든 주차를 환산해, 몇 주 전 포지션 변화까지 오늘 가격으로
+    재평가했고 실행마다 값이 달라져 매번 저장소가 다시 쓰였다(2026-09-23 발견).
+    """
+    hist = yf.Ticker(symbol).history(start=start - dt.timedelta(days=7),
+                                     end=end + dt.timedelta(days=1))
     if hist.empty:
-        raise RuntimeError(f"{symbol} 기준가 조회 실패")
-    return float(hist["Close"].iloc[-1])
+        raise RuntimeError(f"{symbol} 기준가 이력 조회 실패")
+    close = hist["Close"].dropna()
+    close.index = close.index.tz_localize(None).normalize() if close.index.tz is not None \
+        else close.index.normalize()
+    return close
 
 
 def collect(weeks: int = 8) -> list[FlowRecord]:
+    import pandas as pd
+
     out: list[FlowRecord] = []
     for market, (name, mult, px_sym, ccy) in CONTRACTS.items():
         try:
@@ -67,17 +76,23 @@ def collect(weeks: int = 8) -> list[FlowRecord]:
             print(f"[cot] {market} 조회 실패: {exc}")
             continue
         rows = sorted(rows, key=lambda r: r["report_date_as_yyyy_mm_dd"])
-        for prev, cur in zip(rows, rows[1:]):
-            day = dt.datetime.fromisoformat(
-                cur["report_date_as_yyyy_mm_dd"].replace("Z", "")
-            ).date()
-            delta = _net(cur) - _net(prev)
-            try:
-                px = _spot(px_sym)
-            except Exception as exc:
-                print(f"[cot] {market} 기준가 실패: {exc}")
+        days = [dt.datetime.fromisoformat(r["report_date_as_yyyy_mm_dd"].replace("Z", "")).date()
+                for r in rows]
+        if len(days) < 2:
+            continue
+        if ccy != "USD":
+            prefetch(days[1], days[-1])            # 구간 환율을 한 번에 — 날짜별 조회 순서 의존 제거
+        try:
+            closes = _closes(px_sym, days[1], days[-1])
+        except Exception as exc:
+            print(f"[cot] {market} 기준가 실패: {exc}")
+            continue
+        for (prev, cur), day in zip(zip(rows, rows[1:]), days[1:]):
+            px = closes.asof(pd.Timestamp(day))       # 보고일(화) 당일 또는 직전 종가
+            if px is None or pd.isna(px):
                 continue
-            notional = to_usd(delta * mult * px, ccy, day)
+            delta = _net(cur) - _net(prev)
+            notional = to_usd(delta * mult * float(px), ccy, day)
             out.append(
                 FlowRecord(
                     ts=day,

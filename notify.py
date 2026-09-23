@@ -79,11 +79,18 @@ def _market_lines(d: dict) -> list[str]:
     return lines
 
 
-def build_message(d: dict, recovered: bool = False) -> str:
-    """정상 브리프. 텔레그램은 결론만, 근거는 대시보드에서 본다."""
+RESUME = {"warming": "✅ 발행 재개 — 워밍업 완료, 시장별 관측 확보",
+          "halted": "✅ 발행 재개 — 보류 사유 해소"}
+
+
+def build_message(d: dict, recovered: str | None = None) -> str:
+    """정상 브리프. 텔레그램은 결론만, 근거는 대시보드에서 본다.
+
+    recovered: 직전 상태('warming'·'halted')면 첫 줄에 재개 사실을 밝힌다.
+    """
     lines = [f"<b>🌐 Cross-Market Flow Radar</b>  <code>{d['as_of']}</code>", ""]
-    if recovered:
-        lines += ["✅ 발행 재개 — 발행사 공시 기반 v2 원천으로 복구", ""]
+    if recovered in RESUME:
+        lines += [RESUME[recovered], ""]
 
     rot = d.get("rotation", {})
     if rot.get("ready"):
@@ -186,7 +193,7 @@ def decide(d: dict, state: dict, now: dt.datetime, force: bool = False):
         hour = now.astimezone(KST).hour
         if full < 4 and PARTIAL_HOLD[0] <= hour < PARTIAL_HOLD[1] and not force:
             return None, state, "결손 시장 공시 도착 대기 — 다음 실행에서 재판정"
-        msg = build_message(d, recovered=prev in ("halted", "warming"))
+        msg = build_message(d, recovered=prev)
         new.update(last_status="ok", last_sent_as_of=d.get("as_of"))
         return msg, new, "브리프"
 

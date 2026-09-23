@@ -374,12 +374,42 @@ class TestFx(unittest.TestCase):
                 return body
 
         fx._CACHE.clear()
+        fx._COVERED.clear()
         with patch.object(fx.requests, "get", lambda *a, **k: R()):
             self.assertTrue(fx.prefetch(dt.date(2026, 9, 18), dt.date(2026, 9, 21)))
         # 9/20(일)은 직전 기준일(9/18) 값을 쓴다
         self.assertAlmostEqual(fx.to_usd(1350.0, "KRW", dt.date(2026, 9, 20)), 1.0)
         self.assertAlmostEqual(fx.to_usd(0.87, "EUR", dt.date(2026, 9, 21)), 1.0)
         fx._CACHE.clear()
+        fx._COVERED.clear()
+
+    def test_rate_does_not_depend_on_lookup_order(self):
+        # 캐시에 일주일 전 값이 있어도, 조회하지 않은 날짜는 새로 받아야 한다
+        from smr import fx
+        calls = []
+
+        def fake(url, params=None, timeout=None):
+            calls.append(url)
+            day = url.rsplit("..", 1)[1]
+
+            class R:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"rates": {day: {"KRW": 1300.0 + int(day[-2:]), "JPY": 150.0,
+                                            "EUR": 0.9, "GBP": 0.8}}}
+            return R()
+
+        fx._CACHE.clear()
+        fx._COVERED.clear()
+        with patch.object(fx.requests, "get", fake):
+            a = fx.per_usd("KRW", dt.date(2026, 9, 14))
+            b = fx.per_usd("KRW", dt.date(2026, 9, 21))
+        self.assertEqual((a, b), (1314.0, 1321.0))
+        self.assertEqual(len(calls), 2)
+        fx._CACHE.clear()
+        fx._COVERED.clear()
 
 
 # ── 발행 게이트 ─────────────────────────────────────────────────────────────
@@ -399,6 +429,37 @@ class TestComparableSession(unittest.TestCase):
         sig = self._sig({dt.date(2026, 9, 22): "KR JP EU US".split(),
                          dt.date(2026, 9, 23): ["KR"]})
         self.assertEqual(pipeline._comparable_session(sig), dt.date(2026, 9, 22))
+
+
+class TestWarmupRehearsal(unittest.TestCase):
+    """2026-09-24 08:17 KST 실행을 미리 재현 — 공시 전인 시장을 결손으로 오판하지 않는다.
+
+    그 시각 SSGA는 9/23분을 아직 올리지 않았고(KST 14시 공시), 한국·일본만 9/23이 있다.
+    기준일이 9/23으로 앞서 나가면 미국이 '결손'이 되어 보류 알림이 잘못 나간다.
+    """
+
+    def _sig(self):
+        recs = [rec(dt.date(2026, 9, 22), "KR", 1.0), rec(dt.date(2026, 9, 22), "US", 1.0),
+                rec(dt.date(2026, 9, 23), "KR", 1.0), rec(dt.date(2026, 9, 23), "JP", 1.0)]
+        return signals.aggregate(to_frame(recs))
+
+    def test_fallback_as_of_does_not_run_ahead_of_issuer_posting(self):
+        cap = pipeline.expected_session(kst(2026, 9, 24, 8, 17))
+        self.assertEqual(cap, dt.date(2026, 9, 22))
+        self.assertEqual(pipeline._comparable_session(self._sig(), cap=cap),
+                         dt.date(2026, 9, 22))
+
+    def test_market_whose_series_starts_after_as_of_is_warming_not_missing(self):
+        with tempfile.TemporaryDirectory() as d:
+            store = issuer.ObsStore(os.path.join(d, "obs.json"))
+            for sym in ("EWJ", "EZU"):
+                store.put(sym, dt.date(2026, 9, 22), 1, 1.0, "ishares")
+            sig = self._sig()
+            m = pipeline._market_status(sig, dt.date(2026, 9, 22), {"KR": 1.0, "US": 0.92}, store)
+        self.assertEqual(m["JP"]["state"], "warming")
+        self.assertEqual(m["EU"]["state"], "warming")
+        st = pipeline._status(dt.date(2026, 9, 22), 0.43, {}, 0, m, {})
+        self.assertEqual(st["state"], "warming", "공시 전 시장 때문에 보류 알림이 나가면 안 된다")
 
 
 class TestStaleness(unittest.TestCase):
