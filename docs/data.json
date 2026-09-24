@@ -1,20 +1,20 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-24T01:27:32+00:00",
- "as_of": "2026-09-22",
+ "generated_at": "2026-09-24T11:50:50+00:00",
+ "as_of": "2026-09-23",
  "latest_session": "2026-09-23",
- "stale_sessions": 1,
- "confidence": 0.431,
+ "stale_sessions": 0,
+ "confidence": 0.9,
  "confidence_breakdown": {
-  "품질": "0.86",
-  "커버리지": "2/4",
-  "결손": "일본,유럽"
+  "품질": "0.90",
+  "커버리지": "4/4",
+  "결손": "없음"
  },
  "status": {
-  "state": "warming",
-  "reason": "신뢰도 0.43 < 기준 0.65 (품질 0.86 / 커버리지 2/4 / 결손 일본,유럽)",
-  "since": "2026-09-23T13:42:16+00:00",
-  "last_ok_as_of": null,
+  "state": "ok",
+  "reason": null,
+  "since": "2026-09-24T11:50:50+00:00",
+  "last_ok_as_of": "2026-09-23",
   "threshold": 0.65
  },
  "coverage": {
@@ -24,20 +24,20 @@
    "coverage": 1.0
   },
   "JP": {
-   "state": "warming",
-   "last": null,
-   "coverage": null,
+   "state": "ok",
+   "last": "2026-09-23",
+   "coverage": 1.0,
    "obs": {
-    "EWJ": 1
+    "EWJ": 2
    }
   },
   "EU": {
-   "state": "warming",
-   "last": null,
-   "coverage": null,
+   "state": "ok",
+   "last": "2026-09-23",
+   "coverage": 1.0,
    "obs": {
     "EZU": 2,
-    "FEZ": 377,
+    "FEZ": 378,
     "EWG": 2,
     "EWU": 2,
     "EWQ": 2
@@ -45,12 +45,12 @@
   },
   "US": {
    "state": "ok",
-   "last": "2026-09-22",
-   "coverage": 0.917,
+   "last": "2026-09-23",
+   "coverage": 1.0,
    "obs": {
-    "SPY": 377,
-    "IWM": 1,
-    "DIA": 377
+    "SPY": 378,
+    "IWM": 2,
+    "DIA": 378
    }
   }
  },
@@ -87,9 +87,23 @@
  "rotation": {
   "ready": false,
   "rows": [],
-  "reason": "발행 보류 중"
+  "reason": "데이터 축적 중"
  },
  "series": {
+  "EU": [
+   {
+    "d": "2026-09-23",
+    "f": 0.0,
+    "z": null
+   }
+  ],
+  "JP": [
+   {
+    "d": "2026-09-23",
+    "f": 0.0,
+    "z": null
+   }
+  ],
   "KR": [
    {
     "d": "2026-05-26",
@@ -927,25 +941,148 @@
     "d": "2026-09-22",
     "f": 1.8,
     "z": 0.65
+   },
+   {
+    "d": "2026-09-23",
+    "f": 4.665,
+    "z": 1.29
    }
   ]
  },
  "detail": {
+  "EU": {
+   "label": "ETF 순설정",
+   "ts": "2026-09-23",
+   "latest": 0.0,
+   "cum": {
+    "d5": 0.0,
+    "d20": 0.0,
+    "d60": 0.0
+   },
+   "observations": 1,
+   "signal": {
+    "z20": null,
+    "z60": null,
+    "cusum": 0.0,
+    "run": 0,
+    "thresholds": {
+     "z20": 1.8,
+     "cusum": 3.0,
+     "run": 3
+    }
+   },
+   "contributors": [
+    {
+     "name": "EWG",
+     "flow": 0.0
+    },
+    {
+     "name": "EWQ",
+     "flow": 0.0
+    },
+    {
+     "name": "EWU",
+     "flow": 0.0
+    },
+    {
+     "name": "EZU",
+     "flow": 0.0
+    },
+    {
+     "name": "FEZ",
+     "flow": 0.0
+    }
+   ],
+   "actors": [
+    {
+     "name": "투기적 선물 포지션 변화(COT) · 4주",
+     "flow": 4.66
+    }
+   ],
+   "sources": [
+    {
+     "name": "etf_flow",
+     "rows": 5,
+     "confidence": 0.9
+    }
+   ],
+   "coverage": {
+    "state": "ok",
+    "last": "2026-09-23",
+    "coverage": 1.0,
+    "obs": {
+     "EZU": 2,
+     "FEZ": 378,
+     "EWG": 2,
+     "EWU": 2,
+     "EWQ": 2
+    }
+   }
+  },
+  "JP": {
+   "label": "ETF 순설정",
+   "ts": "2026-09-23",
+   "latest": 0.0,
+   "cum": {
+    "d5": 0.0,
+    "d20": 0.0,
+    "d60": 0.0
+   },
+   "observations": 1,
+   "signal": {
+    "z20": null,
+    "z60": null,
+    "cusum": 0.0,
+    "run": 0,
+    "thresholds": {
+     "z20": 1.8,
+     "cusum": 3.0,
+     "run": 3
+    }
+   },
+   "contributors": [
+    {
+     "name": "EWJ",
+     "flow": 0.0
+    }
+   ],
+   "actors": [
+    {
+     "name": "투기적 선물 포지션 변화(COT) · 4주",
+     "flow": 0.021
+    }
+   ],
+   "sources": [
+    {
+     "name": "etf_flow",
+     "rows": 1,
+     "confidence": 0.9
+    }
+   ],
+   "coverage": {
+    "state": "ok",
+    "last": "2026-09-23",
+    "coverage": 1.0,
+    "obs": {
+     "EWJ": 2
+    }
+   }
+  },
   "KR": {
    "label": "외국인 순매수(KOSPI)",
-   "ts": "2026-09-22",
-   "latest": 0.035,
+   "ts": "2026-09-23",
+   "latest": -0.365,
    "cum": {
-    "d5": -2.772,
-    "d20": -10.476,
-    "d60": -30.501
+    "d5": -1.905,
+    "d20": -10.758,
+    "d60": -25.857
    },
-   "observations": 99,
+   "observations": 100,
    "signal": {
-    "z20": 0.55,
-    "z60": 0.34,
+    "z20": 0.17,
+    "z60": 0.04,
     "cusum": 0.0,
-    "run": 3,
+    "run": 4,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -955,21 +1092,25 @@
    "contributors": [
     {
      "name": "KOSPI",
-     "flow": -2.772
+     "flow": -1.905
     }
    ],
    "actors": [
     {
      "name": "기관 순매수(KOSPI)",
-     "flow": 3.489
+     "flow": 3.175
     },
     {
      "name": "연기금 순매수(KOSPI)",
-     "flow": -0.471
+     "flow": -0.404
     },
     {
      "name": "개인 순매수(KOSPI)",
-     "flow": -15.944
+     "flow": -15.386
+    },
+    {
+     "name": "EWY 순설정(미국 상장)",
+     "flow": 0.0
     }
    ],
    "sources": [
@@ -987,19 +1128,19 @@
   },
   "US": {
    "label": "ETF 순설정",
-   "ts": "2026-09-22",
-   "latest": 1.8,
+   "ts": "2026-09-23",
+   "latest": 4.665,
    "cum": {
-    "d5": -6.488,
-    "d20": -11.094,
-    "d60": -11.3
+    "d5": 8.747,
+    "d20": -2.037,
+    "d60": -4.79
    },
-   "observations": 376,
+   "observations": 377,
    "signal": {
-    "z20": 0.65,
-    "z60": 0.52,
-    "cusum": 1.58,
-    "run": 3,
+    "z20": 1.29,
+    "z60": 1.22,
+    "cusum": 2.29,
+    "run": 4,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1009,11 +1150,15 @@
    "contributors": [
     {
      "name": "SPY",
-     "flow": -7.451
+     "flow": 6.906
+    },
+    {
+     "name": "IWM",
+     "flow": 1.367
     },
     {
      "name": "DIA",
-     "flow": 0.963
+     "flow": 0.474
     }
    ],
    "actors": [
@@ -1025,18 +1170,18 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 40,
+     "rows": 41,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-22",
-    "coverage": 0.917,
+    "last": "2026-09-23",
+    "coverage": 1.0,
     "obs": {
-     "SPY": 377,
-     "IWM": 1,
-     "DIA": 377
+     "SPY": 378,
+     "IWM": 2,
+     "DIA": 378
     }
    }
   }
@@ -1044,16 +1189,15 @@
  "health": [
   {
    "collector": "ishares",
-   "ok": false,
-   "records": 4,
-   "asof": "2026-09-23",
-   "error": "기준일 불일치·결측: EWY,EWJ,IWM"
+   "ok": true,
+   "records": 7,
+   "asof": "2026-09-23"
   },
   {
    "collector": "ssga",
    "ok": true,
    "records": 3,
-   "asof": "2026-09-22"
+   "asof": "2026-09-23"
   },
   {
    "collector": "daum_kr",
@@ -1066,9 +1210,7 @@
    "records": 78
   }
  ],
- "quality_warnings": [
-  "ishares: 기준일 불일치·결측: EWY,EWJ,IWM"
- ],
- "rows_total": 1628,
- "rows_added": 4
+ "quality_warnings": [],
+ "rows_total": 1634,
+ "rows_added": 6
 }
