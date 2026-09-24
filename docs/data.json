@@ -1,9 +1,9 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-23T13:58:39+00:00",
+ "generated_at": "2026-09-24T01:27:32+00:00",
  "as_of": "2026-09-22",
- "latest_session": "2026-09-22",
- "stale_sessions": 0,
+ "latest_session": "2026-09-23",
+ "stale_sessions": 1,
  "confidence": 0.431,
  "confidence_breakdown": {
   "품질": "0.86",
@@ -36,11 +36,11 @@
    "last": null,
    "coverage": null,
    "obs": {
-    "EZU": 1,
+    "EZU": 2,
     "FEZ": 377,
-    "EWG": 1,
-    "EWU": 1,
-    "EWQ": 1
+    "EWG": 2,
+    "EWU": 2,
+    "EWQ": 2
    }
   },
   "US": {
@@ -508,7 +508,7 @@
    },
    {
     "d": "2026-09-23",
-    "f": -0.368,
+    "f": -0.365,
     "z": 0.17
    }
   ],
@@ -1044,9 +1044,10 @@
  "health": [
   {
    "collector": "ishares",
-   "ok": true,
-   "records": 7,
-   "asof": "2026-09-22"
+   "ok": false,
+   "records": 4,
+   "asof": "2026-09-23",
+   "error": "기준일 불일치·결측: EWY,EWJ,IWM"
   },
   {
    "collector": "ssga",
@@ -1065,7 +1066,9 @@
    "records": 78
   }
  ],
- "quality_warnings": [],
- "rows_total": 1624,
- "rows_added": 0
+ "quality_warnings": [
+  "ishares: 기준일 불일치·결측: EWY,EWJ,IWM"
+ ],
+ "rows_total": 1628,
+ "rows_added": 4
 }
