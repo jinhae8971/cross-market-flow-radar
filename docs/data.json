@@ -1,27 +1,27 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-25T01:34:01+00:00",
- "as_of": "2026-09-23",
+ "generated_at": "2026-09-25T11:54:16+00:00",
+ "as_of": "2026-09-24",
  "latest_session": "2026-09-24",
- "stale_sessions": 1,
- "confidence": 0.9,
+ "stale_sessions": 0,
+ "confidence": 0.675,
  "confidence_breakdown": {
   "품질": "0.90",
-  "커버리지": "4/4",
-  "결손": "없음"
+  "커버리지": "3/4",
+  "결손": "한국"
  },
  "status": {
   "state": "ok",
   "reason": null,
   "since": "2026-09-24T11:50:50+00:00",
-  "last_ok_as_of": "2026-09-23",
+  "last_ok_as_of": "2026-09-24",
   "threshold": 0.65
  },
  "coverage": {
   "KR": {
-   "state": "ok",
+   "state": "missing",
    "last": "2026-09-23",
-   "coverage": 1.0
+   "coverage": null
   },
   "JP": {
    "state": "ok",
@@ -33,11 +33,11 @@
   },
   "EU": {
    "state": "ok",
-   "last": "2026-09-23",
+   "last": "2026-09-24",
    "coverage": 1.0,
    "obs": {
     "EZU": 3,
-    "FEZ": 378,
+    "FEZ": 379,
     "EWG": 3,
     "EWU": 3,
     "EWQ": 3
@@ -45,12 +45,12 @@
   },
   "US": {
    "state": "ok",
-   "last": "2026-09-23",
+   "last": "2026-09-24",
    "coverage": 1.0,
    "obs": {
-    "SPY": 378,
+    "SPY": 379,
     "IWM": 3,
-    "DIA": 378
+    "DIA": 379
    }
   }
  },
@@ -82,7 +82,22 @@
   "EU": "유럽",
   "US": "미국"
  },
- "alerts": [],
+ "alerts": [
+  {
+   "market": "US",
+   "ts": "2026-09-24",
+   "flow_usd": 13898486523.550001,
+   "z20": 2.802122585176338,
+   "cusum": 5.099097627808153,
+   "run": 5,
+   "triggers": [
+    "강도",
+    "체제전환",
+    "지속성"
+   ],
+   "direction": "유입"
+  }
+ ],
  "suppressed": [],
  "rotation": {
   "ready": false,
@@ -94,6 +109,11 @@
    {
     "d": "2026-09-23",
     "f": 0.0,
+    "z": null
+   },
+   {
+    "d": "2026-09-24",
+    "f": -0.025,
     "z": null
    }
   ],
@@ -941,20 +961,25 @@
     "d": "2026-09-23",
     "f": 4.665,
     "z": 1.29
+   },
+   {
+    "d": "2026-09-24",
+    "f": 13.898,
+    "z": 2.8
    }
   ]
  },
  "detail": {
   "EU": {
    "label": "ETF 순설정",
-   "ts": "2026-09-23",
-   "latest": 0.0,
+   "ts": "2026-09-24",
+   "latest": -0.025,
    "cum": {
-    "d5": 0.0,
-    "d20": 0.0,
-    "d60": 0.0
+    "d5": -0.025,
+    "d20": -0.025,
+    "d60": -0.025
    },
-   "observations": 1,
+   "observations": 2,
    "signal": {
     "z20": null,
     "z60": null,
@@ -969,7 +994,7 @@
    "contributors": [
     {
      "name": "EWG",
-     "flow": 0.0
+     "flow": -0.025
     },
     {
      "name": "EWQ",
@@ -997,17 +1022,17 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 5,
+     "rows": 10,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-23",
+    "last": "2026-09-24",
     "coverage": 1.0,
     "obs": {
      "EZU": 3,
-     "FEZ": 378,
+     "FEZ": 379,
      "EWG": 3,
      "EWU": 3,
      "EWQ": 3
@@ -1016,14 +1041,14 @@
   },
   "JP": {
    "label": "ETF 순설정",
-   "ts": "2026-09-23",
+   "ts": "2026-09-24",
    "latest": 0.0,
    "cum": {
     "d5": 0.0,
     "d20": 0.0,
     "d60": 0.0
    },
-   "observations": 1,
+   "observations": 2,
    "signal": {
     "z20": null,
     "z60": null,
@@ -1050,7 +1075,7 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 1,
+     "rows": 2,
      "confidence": 0.9
     }
    ],
@@ -1116,26 +1141,26 @@
     }
    ],
    "coverage": {
-    "state": "ok",
+    "state": "missing",
     "last": "2026-09-23",
-    "coverage": 1.0
+    "coverage": null
    }
   },
   "US": {
    "label": "ETF 순설정",
-   "ts": "2026-09-23",
-   "latest": 4.665,
+   "ts": "2026-09-24",
+   "latest": 13.898,
    "cum": {
-    "d5": 8.747,
-    "d20": -2.037,
-    "d60": -4.79
+    "d5": 27.472,
+    "d20": 10.113,
+    "d60": 18.524
    },
-   "observations": 377,
+   "observations": 378,
    "signal": {
-    "z20": 1.29,
-    "z60": 1.22,
-    "cusum": 2.29,
-    "run": 4,
+    "z20": 2.8,
+    "z60": 3.31,
+    "cusum": 5.1,
+    "run": 5,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1145,15 +1170,15 @@
    "contributors": [
     {
      "name": "SPY",
-     "flow": 6.906
+     "flow": 26.866
     },
     {
      "name": "IWM",
-     "flow": 1.367
+     "flow": 0.621
     },
     {
      "name": "DIA",
-     "flow": 0.474
+     "flow": -0.015
     }
    ],
    "actors": [
@@ -1165,18 +1190,18 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 41,
+     "rows": 42,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-23",
+    "last": "2026-09-24",
     "coverage": 1.0,
     "obs": {
-     "SPY": 378,
+     "SPY": 379,
      "IWM": 3,
-     "DIA": 378
+     "DIA": 379
     }
    }
   }
@@ -1192,7 +1217,7 @@
    "collector": "ssga",
    "ok": true,
    "records": 3,
-   "asof": "2026-09-23"
+   "asof": "2026-09-24"
   },
   {
    "collector": "daum_kr",
@@ -1206,6 +1231,6 @@
   }
  ],
  "quality_warnings": [],
- "rows_total": 1641,
- "rows_added": 7
+ "rows_total": 1644,
+ "rows_added": 3
 }
