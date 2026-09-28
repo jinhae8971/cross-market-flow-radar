@@ -1,9 +1,9 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-28T01:42:55+00:00",
- "as_of": "2026-09-24",
+ "generated_at": "2026-09-28T14:00:28+00:00",
+ "as_of": "2026-09-25",
  "latest_session": "2026-09-25",
- "stale_sessions": 1,
+ "stale_sessions": 0,
  "confidence": 0.675,
  "confidence_breakdown": {
   "품질": "0.90",
@@ -14,13 +14,13 @@
   "state": "ok",
   "reason": null,
   "since": "2026-09-24T11:50:50+00:00",
-  "last_ok_as_of": "2026-09-24",
+  "last_ok_as_of": "2026-09-25",
   "threshold": 0.65
  },
  "coverage": {
   "KR": {
    "state": "missing",
-   "last": "2026-09-23",
+   "last": "2026-09-28",
    "coverage": null
   },
   "JP": {
@@ -33,11 +33,11 @@
   },
   "EU": {
    "state": "ok",
-   "last": "2026-09-24",
+   "last": "2026-09-25",
    "coverage": 1.0,
    "obs": {
     "EZU": 4,
-    "FEZ": 376,
+    "FEZ": 377,
     "EWG": 4,
     "EWU": 4,
     "EWQ": 4
@@ -45,12 +45,12 @@
   },
   "US": {
    "state": "ok",
-   "last": "2026-09-24",
+   "last": "2026-09-25",
    "coverage": 1.0,
    "obs": {
-    "SPY": 376,
+    "SPY": 377,
     "IWM": 4,
-    "DIA": 376
+    "DIA": 377
    }
   }
  },
@@ -82,22 +82,7 @@
   "EU": "유럽",
   "US": "미국"
  },
- "alerts": [
-  {
-   "market": "US",
-   "ts": "2026-09-24",
-   "flow_usd": 13898486523.550001,
-   "z20": 2.802122585176338,
-   "cusum": 5.099097627808153,
-   "run": 5,
-   "triggers": [
-    "강도",
-    "체제전환",
-    "지속성"
-   ],
-   "direction": "유입"
-  }
- ],
+ "alerts": [],
  "suppressed": [],
  "rotation": {
   "ready": false,
@@ -114,6 +99,11 @@
    {
     "d": "2026-09-24",
     "f": -0.025,
+    "z": null
+   },
+   {
+    "d": "2026-09-25",
+    "f": 0.045,
     "z": null
    }
   ],
@@ -135,16 +125,6 @@
    }
   ],
   "KR": [
-   {
-    "d": "2026-05-28",
-    "f": -1.824,
-    "z": -0.12
-   },
-   {
-    "d": "2026-05-29",
-    "f": -0.692,
-    "z": 0.48
-   },
    {
     "d": "2026-06-01",
     "f": -1.871,
@@ -544,19 +524,14 @@
     "d": "2026-09-23",
     "f": -0.365,
     "z": 0.17
+   },
+   {
+    "d": "2026-09-28",
+    "f": -2.407,
+    "z": -1.61
    }
   ],
   "US": [
-   {
-    "d": "2026-05-28",
-    "f": 1.156,
-    "z": 0.24
-   },
-   {
-    "d": "2026-05-29",
-    "f": 1.11,
-    "z": 0.19
-   },
    {
     "d": "2026-06-01",
     "f": 0.809,
@@ -961,25 +936,30 @@
     "d": "2026-09-24",
     "f": 13.898,
     "z": 2.8
+   },
+   {
+    "d": "2026-09-25",
+    "f": -5.782,
+    "z": -1.19
    }
   ]
  },
  "detail": {
   "EU": {
    "label": "ETF 순설정",
-   "ts": "2026-09-24",
-   "latest": -0.025,
+   "ts": "2026-09-25",
+   "latest": 0.045,
    "cum": {
-    "d5": -0.025,
-    "d20": -0.025,
-    "d60": -0.025
+    "d5": 0.019,
+    "d20": 0.019,
+    "d60": 0.019
    },
-   "observations": 2,
+   "observations": 3,
    "signal": {
     "z20": null,
     "z60": null,
     "cusum": 0.0,
-    "run": 0,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -988,16 +968,16 @@
    },
    "contributors": [
     {
+     "name": "EWU",
+     "flow": 0.066
+    },
+    {
      "name": "EWG",
-     "flow": -0.025
+     "flow": -0.038
     },
     {
      "name": "EWQ",
-     "flow": 0.0
-    },
-    {
-     "name": "EWU",
-     "flow": 0.0
+     "flow": -0.009
     },
     {
      "name": "EZU",
@@ -1017,17 +997,17 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 10,
+     "rows": 15,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-24",
+    "last": "2026-09-25",
     "coverage": 1.0,
     "obs": {
      "EZU": 4,
-     "FEZ": 376,
+     "FEZ": 377,
      "EWG": 4,
      "EWU": 4,
      "EWQ": 4
@@ -1036,19 +1016,19 @@
   },
   "JP": {
    "label": "ETF 순설정",
-   "ts": "2026-09-24",
-   "latest": 0.0,
+   "ts": "2026-09-25",
+   "latest": 0.088,
    "cum": {
-    "d5": 0.0,
-    "d20": 0.0,
-    "d60": 0.0
+    "d5": 0.088,
+    "d20": 0.088,
+    "d60": 0.088
    },
-   "observations": 2,
+   "observations": 3,
    "signal": {
     "z20": null,
     "z60": null,
     "cusum": 0.0,
-    "run": 0,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1058,7 +1038,7 @@
    "contributors": [
     {
      "name": "EWJ",
-     "flow": 0.0
+     "flow": 0.088
     }
    ],
    "actors": [
@@ -1070,7 +1050,7 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 2,
+     "rows": 3,
      "confidence": 0.9
     }
    ],
@@ -1137,25 +1117,25 @@
    ],
    "coverage": {
     "state": "missing",
-    "last": "2026-09-23",
+    "last": "2026-09-28",
     "coverage": null
    }
   },
   "US": {
    "label": "ETF 순설정",
-   "ts": "2026-09-24",
-   "latest": 13.898,
+   "ts": "2026-09-25",
+   "latest": -5.782,
    "cum": {
-    "d5": 27.472,
-    "d20": 10.113,
-    "d60": 18.524
+    "d5": 22.586,
+    "d20": 2.588,
+    "d60": 14.032
    },
-   "observations": 378,
+   "observations": 379,
    "signal": {
-    "z20": 2.8,
-    "z60": 3.31,
-    "cusum": 5.1,
-    "run": 5,
+    "z20": -1.19,
+    "z60": -1.44,
+    "cusum": 3.16,
+    "run": -1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1165,15 +1145,15 @@
    "contributors": [
     {
      "name": "SPY",
-     "flow": 26.866
+     "flow": 22.415
     },
     {
      "name": "IWM",
-     "flow": 0.621
+     "flow": 0.987
     },
     {
      "name": "DIA",
-     "flow": -0.015
+     "flow": -0.816
     }
    ],
    "actors": [
@@ -1185,18 +1165,18 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 42,
+     "rows": 43,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-24",
+    "last": "2026-09-25",
     "coverage": 1.0,
     "obs": {
-     "SPY": 376,
+     "SPY": 377,
      "IWM": 4,
-     "DIA": 376
+     "DIA": 377
     }
    }
   }
@@ -1212,12 +1192,12 @@
    "collector": "ssga",
    "ok": true,
    "records": 3,
-   "asof": "2026-09-24"
+   "asof": "2026-09-25"
   },
   {
    "collector": "daum_kr",
    "ok": true,
-   "records": 116
+   "records": 120
   },
   {
    "collector": "cot",
@@ -1226,6 +1206,6 @@
   }
  ],
  "quality_warnings": [],
- "rows_total": 1654,
- "rows_added": 10
+ "rows_total": 1661,
+ "rows_added": 7
 }
