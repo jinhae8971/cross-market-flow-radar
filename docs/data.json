@@ -1,9 +1,9 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-25T11:54:16+00:00",
+ "generated_at": "2026-09-28T01:42:55+00:00",
  "as_of": "2026-09-24",
- "latest_session": "2026-09-24",
- "stale_sessions": 0,
+ "latest_session": "2026-09-25",
+ "stale_sessions": 1,
  "confidence": 0.675,
  "confidence_breakdown": {
   "품질": "0.90",
@@ -25,10 +25,10 @@
   },
   "JP": {
    "state": "ok",
-   "last": "2026-09-24",
+   "last": "2026-09-25",
    "coverage": 1.0,
    "obs": {
-    "EWJ": 3
+    "EWJ": 4
    }
   },
   "EU": {
@@ -36,11 +36,11 @@
    "last": "2026-09-24",
    "coverage": 1.0,
    "obs": {
-    "EZU": 3,
-    "FEZ": 379,
-    "EWG": 3,
-    "EWU": 3,
-    "EWQ": 3
+    "EZU": 4,
+    "FEZ": 376,
+    "EWG": 4,
+    "EWU": 4,
+    "EWQ": 4
    }
   },
   "US": {
@@ -48,9 +48,9 @@
    "last": "2026-09-24",
    "coverage": 1.0,
    "obs": {
-    "SPY": 379,
-    "IWM": 3,
-    "DIA": 379
+    "SPY": 376,
+    "IWM": 4,
+    "DIA": 376
    }
   }
  },
@@ -127,14 +127,14 @@
     "d": "2026-09-24",
     "f": 0.0,
     "z": null
+   },
+   {
+    "d": "2026-09-25",
+    "f": 0.088,
+    "z": null
    }
   ],
   "KR": [
-   {
-    "d": "2026-05-27",
-    "f": -0.166,
-    "z": 0.76
-   },
    {
     "d": "2026-05-28",
     "f": -1.824,
@@ -547,11 +547,6 @@
    }
   ],
   "US": [
-   {
-    "d": "2026-05-27",
-    "f": 1.202,
-    "z": 0.19
-   },
    {
     "d": "2026-05-28",
     "f": 1.156,
@@ -1016,7 +1011,7 @@
    "actors": [
     {
      "name": "투기적 선물 포지션 변화(COT) · 4주",
-     "flow": 4.66
+     "flow": -2.288
     }
    ],
    "sources": [
@@ -1031,11 +1026,11 @@
     "last": "2026-09-24",
     "coverage": 1.0,
     "obs": {
-     "EZU": 3,
-     "FEZ": 379,
-     "EWG": 3,
-     "EWU": 3,
-     "EWQ": 3
+     "EZU": 4,
+     "FEZ": 376,
+     "EWG": 4,
+     "EWU": 4,
+     "EWQ": 4
     }
    }
   },
@@ -1069,7 +1064,7 @@
    "actors": [
     {
      "name": "투기적 선물 포지션 변화(COT) · 4주",
-     "flow": 0.021
+     "flow": -0.361
     }
    ],
    "sources": [
@@ -1081,10 +1076,10 @@
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-24",
+    "last": "2026-09-25",
     "coverage": 1.0,
     "obs": {
-     "EWJ": 3
+     "EWJ": 4
     }
    }
   },
@@ -1184,7 +1179,7 @@
    "actors": [
     {
      "name": "투기적 선물 포지션 변화(COT) · 4주",
-     "flow": -38.638
+     "flow": -21.635
     }
    ],
    "sources": [
@@ -1199,9 +1194,9 @@
     "last": "2026-09-24",
     "coverage": 1.0,
     "obs": {
-     "SPY": 379,
-     "IWM": 3,
-     "DIA": 379
+     "SPY": 376,
+     "IWM": 4,
+     "DIA": 376
     }
    }
   }
@@ -1211,7 +1206,7 @@
    "collector": "ishares",
    "ok": true,
    "records": 7,
-   "asof": "2026-09-24"
+   "asof": "2026-09-25"
   },
   {
    "collector": "ssga",
@@ -1222,7 +1217,7 @@
   {
    "collector": "daum_kr",
    "ok": true,
-   "records": 120
+   "records": 116
   },
   {
    "collector": "cot",
@@ -1231,6 +1226,6 @@
   }
  ],
  "quality_warnings": [],
- "rows_total": 1644,
- "rows_added": 3
+ "rows_total": 1654,
+ "rows_added": 10
 }
