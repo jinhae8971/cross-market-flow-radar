@@ -1,9 +1,9 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-28T16:01:45+00:00",
+ "generated_at": "2026-09-29T02:36:00+00:00",
  "as_of": "2026-09-25",
- "latest_session": "2026-09-25",
- "stale_sessions": 0,
+ "latest_session": "2026-09-28",
+ "stale_sessions": 1,
  "confidence": 0.675,
  "confidence_breakdown": {
   "품질": "0.90",
@@ -25,10 +25,10 @@
   },
   "JP": {
    "state": "ok",
-   "last": "2026-09-25",
+   "last": "2026-09-28",
    "coverage": 1.0,
    "obs": {
-    "EWJ": 4
+    "EWJ": 5
    }
   },
   "EU": {
@@ -36,11 +36,11 @@
    "last": "2026-09-25",
    "coverage": 1.0,
    "obs": {
-    "EZU": 4,
+    "EZU": 5,
     "FEZ": 376,
-    "EWG": 4,
-    "EWU": 4,
-    "EWQ": 4
+    "EWG": 5,
+    "EWU": 5,
+    "EWQ": 5
    }
   },
   "US": {
@@ -49,7 +49,7 @@
    "coverage": 1.0,
    "obs": {
     "SPY": 376,
-    "IWM": 4,
+    "IWM": 5,
     "DIA": 376
    }
   }
@@ -121,6 +121,11 @@
    {
     "d": "2026-09-25",
     "f": 0.088,
+    "z": null
+   },
+   {
+    "d": "2026-09-28",
+    "f": 0.0,
     "z": null
    }
   ],
@@ -1006,11 +1011,11 @@
     "last": "2026-09-25",
     "coverage": 1.0,
     "obs": {
-     "EZU": 4,
+     "EZU": 5,
      "FEZ": 376,
-     "EWG": 4,
-     "EWU": 4,
-     "EWQ": 4
+     "EWG": 5,
+     "EWU": 5,
+     "EWQ": 5
     }
    }
   },
@@ -1056,10 +1061,10 @@
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-25",
+    "last": "2026-09-28",
     "coverage": 1.0,
     "obs": {
-     "EWJ": 4
+     "EWJ": 5
     }
    }
   },
@@ -1175,7 +1180,7 @@
     "coverage": 1.0,
     "obs": {
      "SPY": 376,
-     "IWM": 4,
+     "IWM": 5,
      "DIA": 376
     }
    }
@@ -1186,7 +1191,7 @@
    "collector": "ishares",
    "ok": true,
    "records": 7,
-   "asof": "2026-09-25"
+   "asof": "2026-09-28"
   },
   {
    "collector": "ssga",
@@ -1197,7 +1202,7 @@
   {
    "collector": "daum_kr",
    "ok": true,
-   "records": 120
+   "records": 116
   },
   {
    "collector": "cot",
@@ -1206,6 +1211,6 @@
   }
  ],
  "quality_warnings": [],
- "rows_total": 1661,
- "rows_added": 0
+ "rows_total": 1668,
+ "rows_added": 7
 }
