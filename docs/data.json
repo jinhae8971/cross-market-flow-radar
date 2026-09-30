@@ -1,9 +1,9 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-09-29T14:22:49+00:00",
+ "generated_at": "2026-09-30T02:09:46+00:00",
  "as_of": "2026-09-28",
- "latest_session": "2026-09-28",
- "stale_sessions": 0,
+ "latest_session": "2026-09-29",
+ "stale_sessions": 1,
  "confidence": 0.9,
  "confidence_breakdown": {
   "품질": "0.90",
@@ -25,10 +25,10 @@
   },
   "JP": {
    "state": "ok",
-   "last": "2026-09-28",
+   "last": "2026-09-29",
    "coverage": 1.0,
    "obs": {
-    "EWJ": 5
+    "EWJ": 6
    }
   },
   "EU": {
@@ -36,11 +36,11 @@
    "last": "2026-09-28",
    "coverage": 1.0,
    "obs": {
-    "EZU": 5,
-    "FEZ": 377,
-    "EWG": 5,
-    "EWU": 5,
-    "EWQ": 5
+    "EZU": 6,
+    "FEZ": 376,
+    "EWG": 6,
+    "EWU": 6,
+    "EWQ": 6
    }
   },
   "US": {
@@ -48,9 +48,9 @@
    "last": "2026-09-28",
    "coverage": 1.0,
    "obs": {
-    "SPY": 377,
-    "IWM": 5,
-    "DIA": 377
+    "SPY": 376,
+    "IWM": 6,
+    "DIA": 376
    }
   }
  },
@@ -131,6 +131,11 @@
    {
     "d": "2026-09-28",
     "f": 0.0,
+    "z": null
+   },
+   {
+    "d": "2026-09-29",
+    "f": -0.204,
     "z": null
    }
   ],
@@ -1026,11 +1031,11 @@
     "last": "2026-09-28",
     "coverage": 1.0,
     "obs": {
-     "EZU": 5,
-     "FEZ": 377,
-     "EWG": 5,
-     "EWU": 5,
-     "EWQ": 5
+     "EZU": 6,
+     "FEZ": 376,
+     "EWG": 6,
+     "EWU": 6,
+     "EWQ": 6
     }
    }
   },
@@ -1076,10 +1081,10 @@
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-28",
+    "last": "2026-09-29",
     "coverage": 1.0,
     "obs": {
-     "EWJ": 5
+     "EWJ": 6
     }
    }
   },
@@ -1194,9 +1199,9 @@
     "last": "2026-09-28",
     "coverage": 1.0,
     "obs": {
-     "SPY": 377,
-     "IWM": 5,
-     "DIA": 377
+     "SPY": 376,
+     "IWM": 6,
+     "DIA": 376
     }
    }
   }
@@ -1206,7 +1211,7 @@
    "collector": "ishares",
    "ok": true,
    "records": 7,
-   "asof": "2026-09-28"
+   "asof": "2026-09-29"
   },
   {
    "collector": "ssga",
@@ -1217,7 +1222,7 @@
   {
    "collector": "daum_kr",
    "ok": true,
-   "records": 120
+   "records": 116
   },
   {
    "collector": "cot",
@@ -1226,6 +1231,6 @@
   }
  ],
  "quality_warnings": [],
- "rows_total": 1675,
- "rows_added": 0
+ "rows_total": 1682,
+ "rows_added": 7
 }
