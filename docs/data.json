@@ -1,9 +1,9 @@
 {
  "dashboard_url": "https://jinhae8971.github.io/cross-market-flow-radar/",
- "generated_at": "2026-10-02T02:18:40+00:00",
- "as_of": "2026-09-30",
+ "generated_at": "2026-10-02T12:40:08+00:00",
+ "as_of": "2026-10-01",
  "latest_session": "2026-10-01",
- "stale_sessions": 1,
+ "stale_sessions": 0,
  "confidence": 0.9,
  "confidence_breakdown": {
   "품질": "0.90",
@@ -14,13 +14,13 @@
   "state": "ok",
   "reason": null,
   "since": "2026-09-24T11:50:50+00:00",
-  "last_ok_as_of": "2026-09-30",
+  "last_ok_as_of": "2026-10-01",
   "threshold": 0.65
  },
  "coverage": {
   "KR": {
    "state": "ok",
-   "last": "2026-10-01",
+   "last": "2026-10-02",
    "coverage": 1.0
   },
   "JP": {
@@ -33,11 +33,11 @@
   },
   "EU": {
    "state": "ok",
-   "last": "2026-09-30",
+   "last": "2026-10-01",
    "coverage": 1.0,
    "obs": {
     "EZU": 8,
-    "FEZ": 378,
+    "FEZ": 379,
     "EWG": 8,
     "EWU": 8,
     "EWQ": 8
@@ -45,12 +45,12 @@
   },
   "US": {
    "state": "ok",
-   "last": "2026-09-30",
+   "last": "2026-10-01",
    "coverage": 1.0,
    "obs": {
-    "SPY": 378,
+    "SPY": 379,
     "IWM": 8,
-    "DIA": 378
+    "DIA": 379
    }
   }
  },
@@ -118,6 +118,11 @@
    },
    {
     "d": "2026-09-30",
+    "f": 0.0,
+    "z": null
+   },
+   {
+    "d": "2026-10-01",
     "f": 0.0,
     "z": null
    }
@@ -569,14 +574,14 @@
     "d": "2026-10-01",
     "f": 0.088,
     "z": 0.75
+   },
+   {
+    "d": "2026-10-02",
+    "f": -0.079,
+    "z": 0.54
    }
   ],
   "US": [
-   {
-    "d": "2026-06-03",
-    "f": 1.314,
-    "z": 0.27
-   },
    {
     "d": "2026-06-04",
     "f": 4.817,
@@ -986,25 +991,30 @@
     "d": "2026-09-30",
     "f": 0.286,
     "z": -0.02
+   },
+   {
+    "d": "2026-10-01",
+    "f": 5.689,
+    "z": 0.97
    }
   ]
  },
  "detail": {
   "EU": {
    "label": "ETF 순설정",
-   "ts": "2026-09-30",
+   "ts": "2026-10-01",
    "latest": 0.0,
    "cum": {
-    "d5": 0.007,
+    "d5": 0.032,
     "d20": 0.007,
     "d60": 0.007
    },
-   "observations": 6,
+   "observations": 7,
    "signal": {
     "z20": null,
     "z60": null,
     "cusum": 0.0,
-    "run": -3,
+    "run": -4,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1018,7 +1028,7 @@
     },
     {
      "name": "EWG",
-     "flow": -0.05
+     "flow": -0.025
     },
     {
      "name": "EWQ",
@@ -1042,17 +1052,17 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 30,
+     "rows": 35,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-30",
+    "last": "2026-10-01",
     "coverage": 1.0,
     "obs": {
      "EZU": 8,
-     "FEZ": 378,
+     "FEZ": 379,
      "EWG": 8,
      "EWU": 8,
      "EWQ": 8
@@ -1061,19 +1071,19 @@
   },
   "JP": {
    "label": "ETF 순설정",
-   "ts": "2026-09-30",
-   "latest": 0.365,
+   "ts": "2026-10-01",
+   "latest": 0.293,
    "cum": {
-    "d5": 0.249,
-    "d20": 0.249,
-    "d60": 0.249
+    "d5": 0.542,
+    "d20": 0.542,
+    "d60": 0.542
    },
-   "observations": 6,
+   "observations": 7,
    "signal": {
     "z20": null,
     "z60": null,
     "cusum": 0.0,
-    "run": 1,
+    "run": 2,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1083,7 +1093,7 @@
    "contributors": [
     {
      "name": "EWJ",
-     "flow": 0.249
+     "flow": 0.542
     }
    ],
    "actors": [
@@ -1095,7 +1105,7 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 6,
+     "rows": 7,
      "confidence": 0.9
     }
    ],
@@ -1110,19 +1120,19 @@
   },
   "KR": {
    "label": "외국인 순매수(KOSPI)",
-   "ts": "2026-09-30",
-   "latest": -1.523,
+   "ts": "2026-10-01",
+   "latest": 0.088,
    "cum": {
-    "d5": -6.472,
-    "d20": -15.906,
-    "d60": -25.635
+    "d5": -6.42,
+    "d20": -15.457,
+    "d60": -24.127
    },
-   "observations": 103,
+   "observations": 104,
    "signal": {
-    "z20": -0.64,
-    "z60": -0.73,
-    "cusum": -1.69,
-    "run": -3,
+    "z20": 0.75,
+    "z60": 0.33,
+    "cusum": -0.86,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1132,25 +1142,25 @@
    "contributors": [
     {
      "name": "KOSPI",
-     "flow": -6.472
+     "flow": -6.42
     }
    ],
    "actors": [
     {
      "name": "기관 순매수(KOSPI)",
-     "flow": 3.221
+     "flow": 3.917
     },
     {
      "name": "연기금 순매수(KOSPI)",
-     "flow": -0.432
+     "flow": -0.404
     },
     {
      "name": "개인 순매수(KOSPI)",
-     "flow": -10.437
+     "flow": -11.08
     },
     {
      "name": "EWY 순설정(미국 상장)",
-     "flow": 0.0
+     "flow": -0.028
     }
    ],
    "sources": [
@@ -1162,25 +1172,25 @@
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-10-01",
+    "last": "2026-10-02",
     "coverage": 1.0
    }
   },
   "US": {
    "label": "ETF 순설정",
-   "ts": "2026-09-30",
-   "latest": 0.286,
+   "ts": "2026-10-01",
+   "latest": 5.689,
    "cum": {
-    "d5": 11.63,
-    "d20": 7.281,
-    "d60": 16.233
+    "d5": 3.421,
+    "d20": 13.193,
+    "d60": 21.054
    },
-   "observations": 382,
+   "observations": 383,
    "signal": {
-    "z20": -0.02,
-    "z60": 0.0,
-    "cusum": 2.32,
-    "run": -2,
+    "z20": 0.97,
+    "z60": 1.26,
+    "cusum": 3.08,
+    "run": 1,
     "thresholds": {
      "z20": 1.8,
      "cusum": 3.0,
@@ -1190,15 +1200,15 @@
    "contributors": [
     {
      "name": "SPY",
-     "flow": 10.906
+     "flow": 2.738
     },
     {
      "name": "IWM",
-     "flow": 1.545
+     "flow": 1.399
     },
     {
      "name": "DIA",
-     "flow": -0.82
+     "flow": -0.716
     }
    ],
    "actors": [
@@ -1210,18 +1220,18 @@
    "sources": [
     {
      "name": "etf_flow",
-     "rows": 46,
+     "rows": 47,
      "confidence": 0.9
     }
    ],
    "coverage": {
     "state": "ok",
-    "last": "2026-09-30",
+    "last": "2026-10-01",
     "coverage": 1.0,
     "obs": {
-     "SPY": 378,
+     "SPY": 379,
      "IWM": 8,
-     "DIA": 378
+     "DIA": 379
     }
    }
   }
@@ -1237,12 +1247,12 @@
    "collector": "ssga",
    "ok": true,
    "records": 3,
-   "asof": "2026-09-30"
+   "asof": "2026-10-01"
   },
   {
    "collector": "daum_kr",
    "ok": true,
-   "records": 116
+   "records": 120
   },
   {
    "collector": "cot",
@@ -1251,6 +1261,6 @@
   }
  ],
  "quality_warnings": [],
- "rows_total": 1710,
+ "rows_total": 1717,
  "rows_added": 7
 }
